@@ -16,9 +16,11 @@ export function videoToClientJson(v: Video) {
     id: v.youtubeVideoId,
     title: v.title,
     channel: v.channelTitle ?? "—",
+    description: v.description ?? "",
     views: formatViewsCount(v.views),
     likes: formatViewsCount(v.likes),
     publishedAt: formatRelativeRu(v.publishedAt),
+    publishedAtIso: v.publishedAt.toISOString(),
     ageCompact: formatAgeCompactRu(v.publishedAt),
     summary: v.description?.slice(0, 320) ?? "",
     viralScore: Math.round(v.viralScore * 100) / 100,
@@ -30,6 +32,8 @@ export function videoToClientJson(v: Video) {
     comments: v.comments,
     viewsPerHour: Math.round(v.viewsPerHour * 100) / 100,
     engagementRate: Math.round(v.engagementRate * 1e6) / 1e6,
+    language: v.language,
+    region: v.region,
   };
 }
 

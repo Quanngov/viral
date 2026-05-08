@@ -19,7 +19,7 @@ export function VideoCard({ video, onOpen }: VideoCardProps) {
     <button
       type="button"
       onClick={onOpen}
-      className="group relative block w-full overflow-hidden rounded-2xl border border-zinc-200/80 bg-zinc-100 text-left shadow-sm shadow-zinc-900/5 transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200/90 hover:shadow-lg hover:shadow-zinc-900/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+      className="group relative block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm shadow-zinc-900/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-zinc-900/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[3/4] w-full">
         <Image
@@ -31,7 +31,7 @@ export function VideoCard({ video, onOpen }: VideoCardProps) {
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
         <span
-          className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[2.25rem] items-center justify-center rounded-xl border px-2 py-1 text-lg font-bold tabular-nums shadow-md backdrop-blur-[2px] transition-transform duration-200 group-hover:scale-[1.02] ${ratingStyle(video.score ?? video.rating)}`}
+          className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[1.9rem] items-center justify-center rounded-lg border px-1.5 py-0.5 text-sm font-semibold tabular-nums shadow-md backdrop-blur-[2px] transition-transform duration-200 group-hover:scale-[1.02] ${ratingStyle(video.score ?? video.rating)}`}
           title="Оценка ролика (1–99)"
         >
           {video.score ?? video.rating}

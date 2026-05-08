@@ -60,10 +60,11 @@ function cacheKeyFrom(parts: {
   q: string;
   region: string;
   language: string;
-  period: string;
   sort: string;
+  period: string;
+  minViews: number;
 }) {
-  return [parts.q, parts.region, parts.language, parts.period, parts.sort].join("|");
+  return [parts.q, parts.region, parts.language, parts.sort, parts.period, parts.minViews].join("|");
 }
 
 async function dbVideoTotal(): Promise<number> {
@@ -103,6 +104,9 @@ export async function GET(req: Request) {
   const language = searchParams.get("language")?.trim() ?? "";
   const period = parsePeriod(searchParams.get("period"));
   const sort = parseSort(searchParams.get("sort"));
+  const minViewsRaw = Number(searchParams.get("minViews") ?? "0");
+  const minViews = Number.isFinite(minViewsRaw) ? Math.max(0, Math.floor(minViewsRaw)) : 0;
+  const effectiveMinViews = Math.max(500, minViews);
 
   const ck = cacheKeyFrom({
     q: qRaw,
@@ -110,6 +114,7 @@ export async function GET(req: Request) {
     language,
     period,
     sort,
+    minViews,
   });
 
   const now = new Date();
@@ -123,7 +128,8 @@ export async function GET(req: Request) {
       ids = [];
     }
     const rows = await loadVideosByYoutubeIds(ids);
-    const sorted = sortVideosList(rows, sort);
+    const filtered = rows.filter((v) => v.views >= effectiveMinViews);
+    const sorted = sortVideosList(filtered, sort);
     const tc = await dbVideoTotal();
     return NextResponse.json({
       source: "cache",
@@ -150,7 +156,7 @@ export async function GET(req: Request) {
     const parsed = rawItems
       .map(parseYoutubeVideoItem)
       .filter((v): v is NonNullable<typeof v> => Boolean(v))
-      .filter((v) => v.durationSeconds > 0 && v.durationSeconds <= 60 && v.views >= 500)
+      .filter((v) => v.durationSeconds > 0 && v.durationSeconds <= 60 && v.views >= effectiveMinViews)
       .filter((v) => isPublishedWithinPeriod(v.publishedAt, period, now));
 
     type Draft = {

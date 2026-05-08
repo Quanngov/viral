@@ -3,30 +3,34 @@
 import { useEffect, useRef, useState } from "react";
 import type { ApiSort } from "@/lib/search-query";
 
-type Popover = "locale" | "filter" | "calendar" | null;
+type Popover = "locale" | "filter" | "calendar" | "views" | null;
 
 export type SearchSubmitPayload = {
   q: string;
   locale: (typeof locales)[number];
   period: (typeof periods)[number];
   sort: ApiSort;
+  minViews: number;
 };
+
+export type SearchFiltersPayload = Omit<SearchSubmitPayload, "q">;
 
 type SearchToolbarProps = {
   searchCost: number;
   searching?: boolean;
   onSubmitSearch?: (payload: SearchSubmitPayload) => void;
+  onFiltersChange?: (payload: SearchFiltersPayload) => void;
 };
 
-function CoinIcon({ className }: { className?: string }) {
+function LightningIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
       <path
-        d="M12 7v10M9.5 9.5c0-1 1-1.5 2.5-1.5s2.5.5 2.5 1.5-1 1.75-2.5 1.75S9.5 13 9.5 14s1 1.5 2.5 1.5 2.5-.5 2.5-1.5"
+        d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.6"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -35,7 +39,8 @@ function CoinIcon({ className }: { className?: string }) {
 function GlobeIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .53-.051 1.049-.147 1.548" />
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.5 12h17M12 3a13.5 13.5 0 0 1 0 18M12 3a13.5 13.5 0 0 0 0 18" />
     </svg>
   );
 }
@@ -56,6 +61,15 @@ function CalendarIcon({ className }: { className?: string }) {
   );
 }
 
+function EyeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+    </svg>
+  );
+}
+
 const locales = ["Весь мир", "Русский", "Английский"] as const;
 const periods = ["Сегодня", "Вчера", "Неделя", "Месяц", "Год", "Все время"] as const;
 
@@ -68,18 +82,33 @@ const SORT_OPTIONS: { label: string; value: ApiSort }[] = [
   { label: "Виральность ↓", value: "viral_desc" },
 ];
 
+const MIN_VIEWS_OPTIONS: { label: string; value: number }[] = [
+  { label: "от 0", value: 0 },
+  { label: "от 1 000", value: 1000 },
+  { label: "от 10 000", value: 10000 },
+  { label: "от 50 000", value: 50000 },
+  { label: "от 100 000", value: 100000 },
+  { label: "от 1 млн", value: 1000000 },
+];
+
 function menuRowClasses(active: boolean) {
   return active
     ? "border border-emerald-400 bg-emerald-50 font-semibold text-emerald-900 shadow-sm shadow-emerald-900/5"
     : "border border-transparent text-zinc-700 hover:bg-emerald-50/70 hover:text-emerald-900";
 }
 
-export function SearchToolbar({ searchCost, searching, onSubmitSearch }: SearchToolbarProps) {
+export function SearchToolbar({
+  searchCost,
+  searching,
+  onSubmitSearch,
+  onFiltersChange,
+}: SearchToolbarProps) {
   const [open, setOpen] = useState<Popover>(null);
   const [query, setQuery] = useState("");
   const [locale, setLocale] = useState<(typeof locales)[number]>(locales[0]);
   const [period, setPeriod] = useState<(typeof periods)[number]>("Неделя");
   const [sortSelection, setSortSelection] = useState<ApiSort>("viral_desc");
+  const [minViews, setMinViews] = useState<number>(0);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -89,6 +118,15 @@ export function SearchToolbar({ searchCost, searching, onSubmitSearch }: SearchT
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, []);
+
+  useEffect(() => {
+    onFiltersChange?.({
+      locale,
+      period,
+      sort: sortSelection,
+      minViews,
+    });
+  }, [locale, period, sortSelection, minViews, onFiltersChange]);
 
   function toggle(next: Popover) {
     setOpen((prev) => (prev === next ? null : next));
@@ -102,13 +140,14 @@ export function SearchToolbar({ searchCost, searching, onSubmitSearch }: SearchT
       locale,
       period,
       sort: sortSelection,
+      minViews,
     });
   }
 
   return (
     <div
       ref={rootRef}
-      className="flex shrink-0 flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm shadow-zinc-900/5"
+      className="flex shrink-0 flex-col gap-4 rounded-2xl bg-white p-5 shadow-sm shadow-zinc-900/5"
     >
       <div className="flex w-full min-w-0 items-center gap-3">
         <label className="relative min-w-0 flex-1">
@@ -134,7 +173,7 @@ export function SearchToolbar({ searchCost, searching, onSubmitSearch }: SearchT
           title="Стоимость одного поиска (мок)"
         >
           <span className="tabular-nums">{searchCost}</span>
-          <CoinIcon className="h-5 w-5 text-emerald-100" />
+          <LightningIcon className="h-5 w-5 text-emerald-100" />
         </button>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -153,6 +192,7 @@ export function SearchToolbar({ searchCost, searching, onSubmitSearch }: SearchT
             </button>
             {open === "locale" ? (
               <div className="absolute right-0 z-40 mt-2 w-48 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg shadow-zinc-900/10">
+                <p className="px-2.5 pb-1 pt-1 text-xs font-medium text-zinc-800">Язык</p>
                 {locales.map((item) => (
                   <button
                     key={item}
@@ -185,6 +225,7 @@ export function SearchToolbar({ searchCost, searching, onSubmitSearch }: SearchT
             </button>
             {open === "filter" ? (
               <div className="absolute right-0 z-40 mt-2 max-h-72 w-56 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-lg shadow-zinc-900/10">
+                <p className="px-2.5 pb-1 pt-1 text-xs font-medium text-zinc-800">Сортировка</p>
                 {SORT_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
@@ -217,6 +258,7 @@ export function SearchToolbar({ searchCost, searching, onSubmitSearch }: SearchT
             </button>
             {open === "calendar" ? (
               <div className="absolute right-0 z-40 mt-2 w-48 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg shadow-zinc-900/10">
+                <p className="px-2.5 pb-1 pt-1 text-xs font-medium text-zinc-800">Дата публикации</p>
                 {periods.map((item) => (
                   <button
                     key={item}
@@ -228,6 +270,39 @@ export function SearchToolbar({ searchCost, searching, onSubmitSearch }: SearchT
                     className={`flex w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${menuRowClasses(period === item)}`}
                   >
                     {item}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle("views");
+              }}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800"
+              aria-expanded={open === "views"}
+              aria-label="Минимальные просмотры"
+            >
+              <EyeIcon className="h-5 w-5" />
+            </button>
+            {open === "views" ? (
+              <div className="absolute right-0 z-40 mt-2 w-44 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg shadow-zinc-900/10">
+                <p className="px-2.5 pb-1 pt-1 text-xs font-medium text-zinc-800">Просмотры</p>
+                {MIN_VIEWS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setMinViews(opt.value);
+                      setOpen(null);
+                    }}
+                    className={`flex w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${menuRowClasses(minViews === opt.value)}`}
+                  >
+                    {opt.label}
                   </button>
                 ))}
               </div>

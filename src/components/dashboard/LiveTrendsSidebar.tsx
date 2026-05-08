@@ -28,7 +28,7 @@ export function LiveTrendsSidebar() {
   }, []);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col border-b border-zinc-200/70 bg-white">
+    <section className="flex min-h-0 flex-1 flex-col rounded-xl bg-transparent">
       <header className="shrink-0 px-4 pb-2 pt-4">
         <div className="flex items-center gap-2">
           <span
@@ -38,12 +38,12 @@ export function LiveTrendsSidebar() {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.25)]" />
           </span>
-          <h2 className="text-xs font-semibold tracking-tight text-zinc-900">
+          <h2 className="text-base font-semibold tracking-tight text-zinc-900">
             Тренды в реальном времени
           </h2>
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-0.5">
+      <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-0.5">
         {!loaded ? (
           <p className="px-2 py-6 text-center text-[11px] text-zinc-400">Загрузка…</p>
         ) : videos.length === 0 ? (

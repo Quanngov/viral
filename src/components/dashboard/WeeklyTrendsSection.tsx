@@ -12,7 +12,7 @@ export function WeeklyTrendsSection({ trends }: WeeklyTrendsSectionProps) {
   const [open, setOpen] = useState(true);
 
   return (
-    <section className="border-b border-zinc-200/70 bg-white px-6 pb-4 pt-4">
+    <section className="rounded-2xl bg-transparent px-6 pb-4 pt-3">
       <header className="mb-3 flex shrink-0 items-center justify-between gap-4">
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">
           Тренды недели

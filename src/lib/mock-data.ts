@@ -18,10 +18,12 @@ export type GridVideo = {
   id: string;
   title: string;
   channel: string;
+  description?: string;
   views: string;
   likes: string;
   /** Полное относительное время (панель). */
   publishedAt: string;
+  publishedAtIso?: string;
   /** Короткий возраст для карточки. */
   ageCompact?: string;
   summary?: string;
@@ -34,6 +36,8 @@ export type GridVideo = {
   comments?: number;
   viewsPerHour?: number;
   engagementRate?: number;
+  language?: string | null;
+  region?: string | null;
 };
 
 export type MockUser = {

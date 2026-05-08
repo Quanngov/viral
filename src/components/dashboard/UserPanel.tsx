@@ -54,20 +54,39 @@ type UserPanelProps = {
 
 export function UserPanel({ user }: UserPanelProps) {
   return (
-    <aside className="flex min-h-0 flex-1 flex-col bg-zinc-50/90 px-3 py-3">
-      <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-200/80 bg-white p-3 shadow-sm shadow-zinc-900/5">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <span className="text-2xl font-bold tabular-nums tracking-tight text-emerald-800">
-            {user.tokens.toLocaleString("ru-RU")}
-          </span>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-            {user.plan}
-          </span>
+    <aside className="shrink-0 bg-transparent px-3 pb-3 pt-2">
+      <div className="flex flex-col rounded-xl bg-white p-3 shadow-sm shadow-zinc-900/5">
+        <p className="mb-2 truncate text-xs font-medium text-zinc-500">{user.email}</p>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm shadow-emerald-900/5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold tracking-tight text-emerald-900">{user.plan}</span>
+              <span className="flex items-center gap-1 text-lg font-bold tabular-nums tracking-tight text-emerald-900">
+                {user.tokens.toLocaleString("ru-RU")}
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path
+                    d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
+            aria-label="Пополнить токены"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5.25v13.5M5.25 12h13.5" />
+            </svg>
+          </button>
         </div>
 
-        <p className="mt-2 truncate text-xs font-medium text-zinc-500">{user.email}</p>
-
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid grid-cols-2 gap-2">
           <button
             type="button"
             className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
@@ -89,13 +108,13 @@ export function UserPanel({ user }: UserPanelProps) {
           </button>
         </div>
 
-        <nav className="mt-3 flex min-h-0 flex-1 flex-col gap-0 border-t border-zinc-100 pt-2">
+        <nav className="mt-2 flex flex-col gap-0 border-t border-zinc-100 pt-1.5">
           {tools.map((item) => (
             <button
               key={item.label}
               type="button"
               disabled={item.soon}
-              className="flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm font-medium text-zinc-800 transition-colors hover:bg-emerald-50 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm font-medium text-zinc-800 transition-colors hover:bg-emerald-50 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="shrink-0 text-zinc-400 [&>svg]:h-4 [&>svg]:w-4">{item.icon}</span>
               <span className="leading-snug">{item.label}</span>
@@ -103,8 +122,8 @@ export function UserPanel({ user }: UserPanelProps) {
           ))}
         </nav>
 
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-zinc-100 pt-2.5">
-          <span className="truncate text-sm font-semibold tracking-tight text-zinc-800">{SERVICE_NAME}</span>
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-zinc-100 pt-2">
+          <span className="truncate text-base font-semibold tracking-tight text-zinc-800">{SERVICE_NAME}</span>
           <button
             type="button"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800"
