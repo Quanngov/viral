@@ -34,3 +34,18 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Локально: база и YouTube
+
+1. Скопируйте `.env.example` в `.env` и укажите `YOUTUBE_API_KEY` (ключ не коммитьте).
+
+2. Команды:
+
+```bash
+npm install
+npx prisma generate
+npx prisma migrate dev --name init
+npm run dev
+```
+
+Поиск Shorts на главной вызывает `GET /api/youtube/search` и при необходимости обращается к YouTube Data API; результаты кэшируются в SQLite (`SearchCache`, TTL 12 ч).

@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Video {
+  id               String    @id @default(cuid())
+  platform         String    @default("youtube")
+  youtubeVideoId   String    @unique
+  url              String
+  title            String
+  description      String?
+  channelId        String?
+  channelTitle     String?
+  thumbnailUrl     String?
+  publishedAt      DateTime
+  durationSeconds  Int
+  views            Int       @default(0)
+  likes            Int       @default(0)
+  comments         Int       @default(0)
+  language         String?
+  region           String?
+  sourceQuery      String?
+  niche            String?
+  /** Часы с момента публикации (min 1). */
+  ageHours         Float     @default(0)
+  relevanceScore   Float     @default(0)
+  rawScore         Float     @default(0)
+  /** Нормализованная оценка 1–99 в рамках последней выдачи поиска. */
+  score            Int       @default(1)
+  viralScore       Float     @default(0)
+  viewsPerHour     Float     @default(0)
+  engagementRate   Float     @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lastFetchedAt    DateTime?
+}
+
+model SearchCache {
+  id           String   @id @default(cuid())
+  cacheKey     String   @unique
+  query        String
+  region       String?
+  language     String?
+  period       String?
+  sort         String?
+  videoIdsJson String
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+}
