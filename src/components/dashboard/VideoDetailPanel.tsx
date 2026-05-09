@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { memo, useEffect, useState } from "react";
 import Image from "next/image";
 import type { GridVideo } from "@/lib/mock-data";
 
@@ -9,163 +9,226 @@ type VideoDetailPanelProps = {
   onClose: () => void;
 };
 
-export function VideoDetailPanel({ video, onClose }: VideoDetailPanelProps) {
+export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose }: VideoDetailPanelProps) {
+  const [playInModal, setPlayInModal] = useState(false);
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+
   useEffect(() => {
     if (!video) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
     return () => {
+      window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = prev;
     };
-  }, [video]);
+  }, [video, onClose]);
+
+  useEffect(() => {
+    setPlayInModal(false);
+    setIsDescriptionOpen(false);
+  }, [video?.id]);
+
+  const platform = (() => {
+    const u = (video?.url ?? "").toLowerCase();
+    if (u.includes("instagram")) return "instagram";
+    return "youtube";
+  })();
 
   if (!video) return null;
 
-  const scoreDisplay = video.score ?? video.rating;
+  const youtubeId = video.id;
+  const canEmbedYoutube = platform === "youtube" && Boolean(youtubeId);
+  const embedUrl = canEmbedYoutube ? `https://www.youtube.com/embed/${youtubeId}` : "";
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
       <button
         type="button"
         aria-label="Закрыть"
-        className="absolute inset-0 bg-zinc-900/40 backdrop-blur-[2px] transition-opacity"
+        className="absolute inset-0 bg-black/35"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-2xl shadow-zinc-900/15 transition-transform duration-200 ease-out">
-        <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4">
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
-              Карточка ролика
-            </p>
-            <h2 className="mt-1 text-lg font-semibold leading-snug tracking-tight text-zinc-900">
-              {video.title}
-            </h2>
-          </div>
+
+      <section
+        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 w-[94vw] max-w-[1100px] rounded-3xl bg-white p-6 shadow-xl shadow-zinc-900/20 md:w-[60vw]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="line-clamp-2 pr-2 text-lg font-semibold leading-snug tracking-tight text-zinc-900 md:text-xl">
+            {video.title}
+          </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-zinc-200 p-2 text-zinc-500 transition-colors hover:border-emerald-300 hover:text-emerald-800"
-            aria-label="Закрыть панель"
+            className="shrink-0 rounded-xl bg-zinc-100 p-2 text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-900"
+            aria-label="Закрыть"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-zinc-900/5">
-            <Image src={video.thumbnailUrl} alt="" fill className="object-cover" sizes="400px" />
-          </div>
-
-          <dl className="mt-4 space-y-3 text-sm text-zinc-800">
+        <div className="mt-4 max-h-[85vh] overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.42fr_0.58fr]">
             <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Канал</dt>
-              <dd className="mt-0.5 font-medium">{video.channel}</dd>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Просмотры</dt>
-                <dd className="mt-0.5 tabular-nums">{video.views}</dd>
+              <div className="relative aspect-[9/16] overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-900/5">
+                {playInModal && canEmbedYoutube ? (
+                  <iframe
+                    src={embedUrl}
+                    title={video.title}
+                    className="h-full w-full"
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                ) : (
+                  <>
+                    <Image
+                      src={video.thumbnailUrl}
+                      alt=""
+                      fill
+                      className="object-cover"
+                      sizes="420px"
+                      loading="lazy"
+                    />
+                    {canEmbedYoutube ? (
+                      <button
+                        type="button"
+                        onClick={() => setPlayInModal(true)}
+                        className="absolute inset-0 flex items-center justify-center bg-black/25 transition-colors hover:bg-black/35"
+                        aria-label="Воспроизвести ролик"
+                      >
+                        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/95 text-emerald-700 shadow-lg">
+                          <svg className="h-7 w-7" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </span>
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Лайки</dt>
-                <dd className="mt-0.5 tabular-nums">{video.likes}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Комментарии</dt>
-                <dd className="mt-0.5 tabular-nums">{video.comments ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Опубликовано</dt>
-                <dd className="mt-0.5">{video.publishedAt}</dd>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Score</dt>
-                <dd className="mt-0.5 font-semibold tabular-nums text-emerald-800">{scoreDisplay}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Viral score</dt>
-                <dd className="mt-0.5 tabular-nums">{video.viralScore}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Просм./ч</dt>
-                <dd className="mt-0.5 tabular-nums">{video.viewsPerHour != null ? video.viewsPerHour : "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Engagement</dt>
-                <dd className="mt-0.5 tabular-nums">
-                  {video.engagementRate != null ? `${(video.engagementRate * 100).toFixed(2)}%` : "—"}
-                </dd>
-              </div>
-            </div>
-            {video.url ? (
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Ссылка</dt>
-                <dd className="mt-0.5 break-all">
-                  <a href={video.url} target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline decoration-emerald-700/30 underline-offset-2 hover:text-emerald-900">
-                    {video.url}
-                  </a>
-                </dd>
-              </div>
-            ) : null}
-          </dl>
 
-          {video.summary ? (
-            <p className="mt-4 text-sm leading-relaxed text-zinc-600">{video.summary}</p>
-          ) : null}
+              {video.url ? (
+                <a
+                  href={video.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
+                >
+                  Открыть на площадке
+                </a>
+              ) : null}
 
-          {video.url ? (
-            <a
-              href={video.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
-            >
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path d="M8 5v14l11-7z" />
-              </svg>
-              Посмотреть ролик
-            </a>
-          ) : (
-            <p className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 py-3 text-center text-sm text-zinc-500">
-              Ссылка на ролик недоступна
-            </p>
-          )}
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                <StatCell k="Просмотры" v={video.views} />
+                <StatCell k="Лайки" v={video.likes} />
+                <StatCell k="Комментарии" v={String(video.comments ?? "—")} />
+                <StatCell k="Дата публикации" v={video.publishedAt} />
+                <StatCell k="Платформа" v={platform === "youtube" ? "YouTube" : "Instagram"} />
+              </div>
+            </div>
 
-          <p className="mt-6 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
-            Инструменты для этого ролика
-          </p>
-          <div className="mt-2 grid grid-cols-1 gap-2">
-            <button
-              type="button"
-              className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-left text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
-            >
-              Глубокий анализ
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-left text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
-            >
-              Сгенерировать сценарий
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-left text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
-            >
-              Добавить в избранное
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-left text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
-            >
-              Открыть в контент-радаре
-            </button>
+            <div>
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <p className="text-sm font-semibold text-zinc-900">Текст ролика</p>
+                <div className="relative mt-3 min-h-[150px] rounded-xl bg-white p-4">
+                  <p className="blur-sm text-sm leading-relaxed text-zinc-600 opacity-80">
+                    Здесь будет расшифровка речи из ролика после транскрибации...
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => console.log("transcription soon")}
+                    className="absolute inset-x-0 top-1/2 mx-auto inline-flex w-fit -translate-y-1/2 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
+                  >
+                    <span className="tabular-nums">5</span>
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <path
+                        d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span>Транскрибация</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-zinc-200 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setIsDescriptionOpen((v) => !v)}
+                  className="flex w-full items-center justify-between px-4 py-3 text-left"
+                >
+                  <span className="text-sm font-semibold text-zinc-900">Описание</span>
+                  <svg
+                    className={`h-4 w-4 text-zinc-500 transition-transform ${isDescriptionOpen ? "rotate-180" : ""}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    aria-hidden
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                {isDescriptionOpen ? (
+                  <div className="border-t border-zinc-100 px-4 py-3">
+                    <p className="text-sm leading-relaxed text-zinc-600">
+                      {video.description?.trim() || "Описание отсутствует"}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
+                >
+                  Анализировать
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
+                >
+                  Сценарий
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
+                >
+                  В избранное
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
+                >
+                  В контент-план
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </aside>
+      </section>
+    </div>
+  );
+});
+
+function StatCell({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{k}</p>
+      <p className={`mt-0.5 text-sm text-zinc-900 ${mono ? "font-mono text-xs break-all" : "tabular-nums"}`}>
+        {v}
+      </p>
     </div>
   );
 }
