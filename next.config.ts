@@ -18,6 +18,41 @@ const nextConfig: NextConfig = {
         hostname: "img.youtube.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "yt3.ggpht.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "yt3.googleusercontent.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.cdninstagram.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.fbcdn.net",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.tiktokcdn.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.tiktokcdn-us.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.byteoversea.com",
+        pathname: "/**",
+      },
     ],
   },
 };

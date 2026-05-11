@@ -10,9 +10,10 @@ import { VideoGrid } from "@/components/dashboard/VideoGrid";
 
 type SearchResultsSectionProps = {
   searchCost: number;
+  onVideoClick?: (video: GridVideo) => void;
 };
 
-export function SearchResultsSection({ searchCost }: SearchResultsSectionProps) {
+export function SearchResultsSection({ searchCost, onVideoClick }: SearchResultsSectionProps) {
   const [sourceVideos, setSourceVideos] = useState<GridVideo[]>([]);
   const [videos, setVideos] = useState<GridVideo[]>([]);
   const [visibleCount, setVisibleCount] = useState(8);
@@ -329,7 +330,7 @@ export function SearchResultsSection({ searchCost }: SearchResultsSectionProps) 
         </div>
       ) : (
         <>
-          <VideoGrid videos={displayedVideos} loading={busy} />
+          <VideoGrid videos={displayedVideos} loading={busy} onVideoClick={onVideoClick} />
           {!busy && videos.length > visibleCount ? (
             <div className="mt-1 flex justify-center">
               <button

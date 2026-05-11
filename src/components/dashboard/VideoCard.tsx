@@ -27,7 +27,7 @@ export function VideoCard({ video, onOpen }: VideoCardProps) {
           alt=""
           fill
           sizes="(min-width: 1280px) 22vw, (min-width: 768px) 33vw, 100vw"
-          className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
         <span

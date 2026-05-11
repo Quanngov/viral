@@ -3,11 +3,16 @@ import type { LiveTrendVideo } from "@/lib/mock-data";
 
 type LiveTrendItemProps = {
   video: LiveTrendVideo;
+  onClick?: () => void;
 };
 
-export function LiveTrendItem({ video }: LiveTrendItemProps) {
+export function LiveTrendItem({ video, onClick }: LiveTrendItemProps) {
   return (
-    <article className="group flex gap-2 rounded-xl border border-transparent bg-white p-2 shadow-sm shadow-zinc-900/5 transition-all duration-200 hover:border-emerald-200/80 hover:shadow-md hover:shadow-zinc-900/10">
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full gap-2 rounded-xl border border-transparent bg-white p-2 text-left shadow-sm shadow-zinc-900/5 transition-all duration-200 hover:border-emerald-200/80 hover:shadow-md hover:shadow-zinc-900/10"
+    >
       <div className="relative h-14 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-100 ring-1 ring-zinc-900/5">
         <Image
           src={video.thumbnailUrl}
@@ -25,6 +30,6 @@ export function LiveTrendItem({ video }: LiveTrendItemProps) {
           {video.views}
         </span>
       </div>
-    </article>
+    </button>
   );
 }

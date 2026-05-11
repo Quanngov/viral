@@ -1,9 +1,13 @@
 import type { ReactNode } from "react";
 import type { MockUser } from "@/lib/mock-data";
 
-const tools: { label: string; soon?: boolean; icon: ReactNode }[] = [
+export type DashboardView = "home" | "competitors";
+
+const tools: { key: string; label: string; view?: DashboardView; soon?: boolean; icon: ReactNode }[] = [
   {
+    key: "home",
     label: "Главная",
+    view: "home",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
@@ -11,7 +15,9 @@ const tools: { label: string; soon?: boolean; icon: ReactNode }[] = [
     ),
   },
   {
+    key: "competitors",
     label: "Шпион конкурентов",
+    view: "competitors",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
@@ -20,6 +26,7 @@ const tools: { label: string; soon?: boolean; icon: ReactNode }[] = [
     ),
   },
   {
+    key: "scripts",
     label: "Генерация сценариев",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
@@ -28,6 +35,7 @@ const tools: { label: string; soon?: boolean; icon: ReactNode }[] = [
     ),
   },
   {
+    key: "favorites",
     label: "Избранное",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
@@ -36,6 +44,7 @@ const tools: { label: string; soon?: boolean; icon: ReactNode }[] = [
     ),
   },
   {
+    key: "content-radar",
     label: "Контент-Радар (скоро)",
     soon: true,
     icon: (
@@ -50,9 +59,11 @@ const SERVICE_NAME = "TrendRadar";
 
 type UserPanelProps = {
   user: MockUser;
+  activeView: DashboardView;
+  onChangeView: (view: DashboardView) => void;
 };
 
-export function UserPanel({ user }: UserPanelProps) {
+export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
   return (
     <aside className="shrink-0 bg-transparent px-3 pb-3 pt-2">
       <div className="flex flex-col rounded-xl bg-white p-3 shadow-sm shadow-zinc-900/5">
@@ -111,12 +122,25 @@ export function UserPanel({ user }: UserPanelProps) {
         <nav className="mt-2 flex flex-col gap-0 border-t border-zinc-100 pt-1.5">
           {tools.map((item) => (
             <button
-              key={item.label}
+              key={item.key}
               type="button"
               disabled={item.soon}
-              className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm font-medium text-zinc-800 transition-colors hover:bg-emerald-50 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => {
+                if (item.view) onChangeView(item.view);
+              }}
+              className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                item.view && activeView === item.view
+                  ? "bg-emerald-50 text-emerald-900"
+                  : "text-zinc-800 hover:bg-emerald-50 hover:text-emerald-900"
+              }`}
             >
-              <span className="shrink-0 text-zinc-400 [&>svg]:h-4 [&>svg]:w-4">{item.icon}</span>
+              <span
+                className={`shrink-0 [&>svg]:h-4 [&>svg]:w-4 ${
+                  item.view && activeView === item.view ? "text-emerald-600" : "text-zinc-400"
+                }`}
+              >
+                {item.icon}
+              </span>
               <span className="leading-snug">{item.label}</span>
             </button>
           ))}

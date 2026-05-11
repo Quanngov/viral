@@ -1,20 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { LiveTrendVideo } from "@/lib/mock-data";
+import type { GridVideo, LiveTrendVideo } from "@/lib/mock-data";
 import { LiveTrendItem } from "./LiveTrendItem";
 
-export function LiveTrendsSidebar() {
+type LiveTrendsSidebarProps = {
+  onVideoClick?: (video: GridVideo) => void;
+};
+
+export function LiveTrendsSidebar({ onVideoClick }: LiveTrendsSidebarProps) {
   const [videos, setVideos] = useState<LiveTrendVideo[]>([]);
+  const [videoMap, setVideoMap] = useState<Record<string, GridVideo>>({});
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancel = false;
     async function load() {
       try {
-        const res = await fetch("/api/videos/trending?limit=10");
-        const data = (await res.json()) as { videos?: LiveTrendVideo[] };
-        if (!cancel) setVideos(Array.isArray(data.videos) ? data.videos : []);
+        const [trendingRes, homeRes] = await Promise.all([
+          fetch("/api/videos/trending?limit=10"),
+          fetch("/api/videos/home?limit=50"),
+        ]);
+        const trendingData = (await trendingRes.json()) as { videos?: LiveTrendVideo[] };
+        const homeData = (await homeRes.json()) as { videos?: GridVideo[] };
+        if (!cancel) {
+          const trend = Array.isArray(trendingData.videos) ? trendingData.videos : [];
+          const home = Array.isArray(homeData.videos) ? homeData.videos : [];
+          setVideos(trend);
+          const map: Record<string, GridVideo> = {};
+          for (const v of home) map[v.id] = v;
+          setVideoMap(map);
+        }
       } catch {
         if (!cancel) setVideos([]);
       } finally {
@@ -54,7 +70,28 @@ export function LiveTrendsSidebar() {
           <ul className="flex flex-col gap-2 px-1">
             {videos.map((video) => (
               <li key={video.id}>
-                <LiveTrendItem video={video} />
+                <LiveTrendItem
+                  video={video}
+                  onClick={() => {
+                    const mapped = videoMap[video.id];
+                    if (mapped) {
+                      onVideoClick?.(mapped);
+                      return;
+                    }
+                    onVideoClick?.({
+                      id: video.id,
+                      title: video.title,
+                      channel: "—",
+                      views: video.views,
+                      likes: "—",
+                      publishedAt: "—",
+                      viralScore: 0,
+                      rating: 1,
+                      viralLabel: "Stable",
+                      thumbnailUrl: video.thumbnailUrl,
+                    });
+                  }}
+                />
               </li>
             ))}
           </ul>
