@@ -32,7 +32,7 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
   const [boot, setBoot] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [tokensRemaining, setTokensRemaining] = useState<number | null>(null);
+  const [, setTokensRemaining] = useState<number | null>(null);
   const [session, setSession] = useState<FeedSession | null>(null);
   const [noMore, setNoMore] = useState(false);
   const feedBatchIndexRef = useRef(1);
@@ -243,10 +243,6 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
   const statsParts: string[] = [];
   if (totalCount !== null) {
     statsParts.push(`В базе: ${totalCount} роликов`);
-    statsParts.push(`В подборке: ${videos.length} из ${sourceVideos.length}`);
-  }
-  if (tokensRemaining !== null) {
-    statsParts.push(`Токены: ${tokensRemaining.toLocaleString("ru-RU")}`);
   }
 
   return (

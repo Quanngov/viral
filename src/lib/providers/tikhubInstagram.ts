@@ -1,7 +1,11 @@
 import { compactErrorMeta, logAdminEvent } from "@/lib/admin-events";
 
 const TIKHUB_SEARCH_URL = "https://api.tikhub.io/api/v1/instagram/v2/search_reels";
-const TIMEOUT_MS = 14_000;
+const TIKHUB_USER_REELS_URL = "https://api.tikhub.io/api/v1/instagram/v2/fetch_user_reels";
+/** Таймаут для поиска Reels по ключевому слову (короткий). */
+export const TIMEOUT_MS_INSTAGRAM_SEARCH = 14_000;
+/** Таймаут для fetch_user_reels при конкурентах (длиннее). */
+export const TIMEOUT_MS_INSTAGRAM_USER_REELS = 45_000;
 
 export type NormalizedInstagramReel = {
   platform: "instagram";
@@ -48,11 +52,191 @@ function pickItems(json: unknown): unknown[] {
       const d2 = inner as Record<string, unknown>;
       const items = d2.items;
       if (Array.isArray(items)) return items;
+      const reels = d2.reels;
+      if (Array.isArray(reels)) return reels;
     }
     const itemsTop = d1.items;
     if (Array.isArray(itemsTop)) return itemsTop;
+    const reelsTop = d1.reels;
+    if (Array.isArray(reelsTop)) return reelsTop;
   }
   return [];
+}
+
+/** Извлекает pagination_token из ответа TikHub v2 (без логирования значения). */
+export function extractTikHubPaginationToken(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const root = json as Record<string, unknown>;
+  const tryVal = (v: unknown): string | null => {
+    const s = str(v);
+    return s && s.length > 0 ? s : null;
+  };
+  const direct =
+    tryVal(root.pagination_token) ??
+    tryVal(root.paginationToken) ??
+    tryVal(root.next_max_id);
+  if (direct) return direct;
+  const data = root.data;
+  if (!data || typeof data !== "object") return null;
+  const d1 = data as Record<string, unknown>;
+  const fromD1 =
+    tryVal(d1.pagination_token) ??
+    tryVal(d1.paginationToken) ??
+    tryVal(d1.next_max_id);
+  if (fromD1) return fromD1;
+  const inner = d1.data;
+  if (!inner || typeof inner !== "object") return null;
+  const d2 = inner as Record<string, unknown>;
+  return (
+    tryVal(d2.pagination_token) ??
+    tryVal(d2.paginationToken) ??
+    tryVal(d2.next_max_id) ??
+    null
+  );
+}
+
+export type TikHubUserReelsPageResult = {
+  ok: boolean;
+  httpStatus: number;
+  reels: NormalizedInstagramReel[];
+  paginationToken: string | null;
+  /** Краткая метка для логов, без тела ответа */
+  errorKind?: string;
+};
+
+export type TikHubUserReelsPageAttemptInfo = {
+  attempt: 1 | 2;
+  timeoutMs: number;
+  result: TikHubUserReelsPageResult;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isUserReelsFetchRetryable(r: TikHubUserReelsPageResult): boolean {
+  if (r.ok) return false;
+  if (r.httpStatus === 401 || r.httpStatus === 402 || r.httpStatus === 403) return false;
+  const k = r.errorKind ?? "";
+  if (k === "tikhub_auth" || k === "tikhub_insufficient_balance" || k === "missing_token" || k === "empty_username") {
+    return false;
+  }
+  if (k === "timeout" || r.httpStatus === 408) return true;
+  if (r.httpStatus === 0) return true;
+  return false;
+}
+
+/**
+ * Один HTTP-запрос fetch_user_reels с заданным таймаутом (без retry).
+ */
+export async function fetchInstagramUserReelsTikHubPageOnce(
+  username: string,
+  paginationToken: string | null,
+  timeoutMs: number,
+): Promise<TikHubUserReelsPageResult> {
+  const token = process.env.TIKHUB_TOKEN?.trim();
+  if (!token) {
+    return { ok: false, httpStatus: 503, reels: [], paginationToken: null, errorKind: "missing_token" };
+  }
+
+  const user = username.trim().replace(/^@/, "");
+  if (!user) {
+    return { ok: false, httpStatus: 400, reels: [], paginationToken: null, errorKind: "empty_username" };
+  }
+
+  const url = new URL(TIKHUB_USER_REELS_URL);
+  url.searchParams.set("username", user);
+  if (paginationToken) {
+    url.searchParams.set("pagination_token", paginationToken);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch {
+      return { ok: false, httpStatus: res.status, reels: [], paginationToken: null, errorKind: "invalid_json" };
+    }
+
+    if (res.status === 402) {
+      return { ok: false, httpStatus: 402, reels: [], paginationToken: null, errorKind: "tikhub_insufficient_balance" };
+    }
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, httpStatus: res.status, reels: [], paginationToken: null, errorKind: "tikhub_auth" };
+    }
+
+    if (!res.ok) {
+      const msg =
+        typeof json === "object" && json && "message" in json
+          ? String((json as { message?: unknown }).message).slice(0, 200)
+          : res.statusText;
+      return {
+        ok: false,
+        httpStatus: res.status,
+        reels: [],
+        paginationToken: null,
+        errorKind: `http_${res.status}:${msg.slice(0, 80)}`,
+      };
+    }
+
+    const items = pickItems(json);
+    const reels: NormalizedInstagramReel[] = [];
+    for (const raw of items) {
+      if (!raw || typeof raw !== "object") continue;
+      const parsed = parseItem(raw as Record<string, unknown>);
+      if (parsed) reels.push(parsed);
+    }
+
+    const next = extractTikHubPaginationToken(json);
+    return { ok: true, httpStatus: res.status, reels, paginationToken: next };
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      return { ok: false, httpStatus: 408, reels: [], paginationToken: null, errorKind: "timeout" };
+    }
+    return {
+      ok: false,
+      httpStatus: 0,
+      reels: [],
+      paginationToken: null,
+      errorKind: e instanceof Error ? `fetch:${e.name}` : "fetch_error",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * До 2 попыток (вторая только при timeout / сетевой ошибке), пауза 800–1200 ms между попытками.
+ * Таймаут одной попытки — 45 с (конкуренты). Логирование — через onAttempt.
+ */
+export async function fetchInstagramUserReelsTikHubPageForCompetitor(
+  username: string,
+  paginationToken: string | null,
+  onAttempt?: (info: TikHubUserReelsPageAttemptInfo) => void | Promise<void>,
+): Promise<TikHubUserReelsPageResult> {
+  const timeoutMs = TIMEOUT_MS_INSTAGRAM_USER_REELS;
+  let result = await fetchInstagramUserReelsTikHubPageOnce(username, paginationToken, timeoutMs);
+  await onAttempt?.({ attempt: 1, timeoutMs, result });
+  if (result.ok || !isUserReelsFetchRetryable(result)) {
+    return result;
+  }
+  await sleep(800 + Math.floor(Math.random() * 401));
+  result = await fetchInstagramUserReelsTikHubPageOnce(username, paginationToken, timeoutMs);
+  await onAttempt?.({ attempt: 2, timeoutMs, result });
+  return result;
 }
 
 function str(v: unknown): string | null {
@@ -140,7 +324,11 @@ function parseItem(item: Record<string, unknown>): NormalizedInstagramReel | nul
   const authorDisplay =
     str(user?.full_name) ?? str(capUser?.full_name) ?? null;
   const authorAvatar =
-    str(user?.profile_pic_url) ?? str(capUser?.profile_pic_url) ?? null;
+    str(user?.profile_pic_url_hd) ??
+    str(user?.profile_pic_url) ??
+    str(capUser?.profile_pic_url_hd) ??
+    str(capUser?.profile_pic_url) ??
+    null;
 
   const followers = (() => {
     const f = num(user?.follower_count, NaN);
@@ -194,7 +382,7 @@ export async function searchInstagramReelsTikHub(keyword: string): Promise<TikHu
 
   const url = `${TIKHUB_SEARCH_URL}?keyword=${encodeURIComponent(q)}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS_INSTAGRAM_SEARCH);
 
   try {
     const res = await fetch(url, {

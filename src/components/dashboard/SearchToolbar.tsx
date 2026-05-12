@@ -110,7 +110,7 @@ export function SearchToolbar({
   const [period, setPeriod] = useState<(typeof periods)[number]>("Месяц");
   const [sortSelection, setSortSelection] = useState<ApiSort>("viral_desc");
   const [minViews, setMinViews] = useState<number>(0);
-  const [platform, setPlatform] = useState<FeedPlatformMode>("all");
+  const platform: FeedPlatformMode = "all";
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -313,31 +313,6 @@ export function SearchToolbar({
             ) : null}
           </div>
         </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-zinc-500">Площадка</span>
-        {(
-          [
-            { id: "all" as const, label: "Все" },
-            { id: "youtube" as const, label: "YouTube" },
-            { id: "instagram" as const, label: "Instagram" },
-          ] as const
-        ).map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            disabled={searching}
-            onClick={() => setPlatform(opt.id)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
-              platform === opt.id
-                ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20"
-                : "border border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-emerald-300 hover:bg-emerald-50/60"
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
       </div>
     </div>
   );

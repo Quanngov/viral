@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GridVideo } from "@/lib/mock-data";
 import {
   type CompetitorAccount,
@@ -126,8 +126,14 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [competitorInput, setCompetitorInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addNotice, setAddNotice] = useState<{ text: string; tone: "ok" | "warn" } | null>(null);
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(8);
+  const [disabledLatestIds, setDisabledLatestIds] = useState<Set<string>>(() => new Set());
+  const [disabledAllTableIds, setDisabledAllTableIds] = useState<Set<string>>(() => new Set());
+  const [accountFilterOpen, setAccountFilterOpen] = useState(false);
+  const accountFilterRef = useRef<HTMLDivElement>(null);
   const { hydrateForVideos } = useSavedVideos();
 
   const competitorsById = useMemo(() => {
@@ -136,16 +142,25 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
     return map;
   }, [competitors]);
 
-  const latestVideos = useMemo(() => {
-    return [...videos]
-      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      .slice(0, visibleCount);
-  }, [videos, visibleCount]);
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (!accountFilterRef.current?.contains(e.target as Node)) setAccountFilterOpen(false);
+    }
+    if (accountFilterOpen) document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [accountFilterOpen]);
 
-  const latestTotalCount = useMemo(() => {
-    return [...videos].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      .length;
-  }, [videos]);
+  const latestVideoPool = useMemo(() => {
+    return [...videos]
+      .filter((v) => !disabledLatestIds.has(v.competitorId))
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  }, [videos, disabledLatestIds]);
+
+  const latestTotalCount = latestVideoPool.length;
+
+  const latestVideos = useMemo(() => {
+    return latestVideoPool.slice(0, visibleCount);
+  }, [latestVideoPool, visibleCount]);
 
   const allVideos = useMemo(() => {
     const accountValue = (v: CompetitorVideo) =>
@@ -167,6 +182,10 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
       return sortDirection === "asc" ? cmp : -cmp;
     });
   }, [videos, competitorsById, sortField, sortDirection]);
+
+  const tableVideos = useMemo(() => {
+    return allVideos.filter((v) => !disabledAllTableIds.has(v.competitorId));
+  }, [allVideos, disabledAllTableIds]);
 
   useEffect(() => {
     const grids = videos.map((v) => adaptCompetitorVideoToGridVideo(v, competitorsById.get(v.competitorId)));
@@ -216,6 +235,8 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
       );
       return;
     }
+    setAddSubmitting(true);
+    setFormError(null);
     try {
       const res = await fetch("/api/competitors", {
         method: "POST",
@@ -224,18 +245,36 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
           url: competitorInput.trim(),
           platform: detected.platform,
           displayName: detected.username,
-          description: "replace with TikHub ingestion later",
         }),
       });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        warning?: string;
+        tokensRemaining?: number;
+      };
+      if (res.status === 402) {
+        setFormError(
+          data.message ??
+            "Недостаточно внутренних токенов для добавления аккаунта. Пополните баланс и попробуйте снова.",
+        );
+        return;
+      }
+      if (res.status === 503) {
+        setFormError(data.message ?? "Сервис временно недоступен.");
+        return;
+      }
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (data.error === "already_exists") {
           setFormError("Этот аккаунт уже добавлен.");
           return;
         }
-        setFormError("Не удалось добавить конкурента.");
+        setFormError(data.message ?? "Не удалось добавить конкурента.");
         return;
       }
+      const noticeText =
+        data.warning && data.message ? `${data.message} ${data.warning}` : (data.message ?? "Конкурент добавлен.");
+      setAddNotice({ text: noticeText, tone: data.warning ? "warn" : "ok" });
       setCompetitorInput("");
       setFormError(null);
       setAddModalOpen(false);
@@ -254,6 +293,8 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
       }
     } catch {
       setFormError("Не удалось добавить конкурента.");
+    } finally {
+      setAddSubmitting(false);
     }
   }
 
@@ -261,10 +302,27 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
     <section className="px-6 pt-5">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Шпион конкурентов</h1>
 
+      {addNotice ? (
+        <div
+          className={`mt-3 rounded-xl border px-4 py-3 text-sm leading-relaxed ${
+            addNotice.tone === "warn"
+              ? "border-amber-200 bg-amber-50 text-amber-950"
+              : "border-emerald-200 bg-emerald-50 text-emerald-950"
+          }`}
+          role="status"
+        >
+          {addNotice.text}
+        </div>
+      ) : null}
+
       <div className="scrollbar-hide mt-4 flex items-start gap-3 overflow-x-auto overflow-y-visible pb-3 pt-2">
         <button
           type="button"
-          onClick={() => setAddModalOpen(true)}
+          onClick={() => {
+            setAddModalOpen(true);
+            setFormError(null);
+            setAddNotice(null);
+          }}
           className="group shrink-0"
           aria-label="Добавить конкурента"
         >
@@ -276,27 +334,52 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
           </span>
         </button>
 
-        {competitors.map((competitor) => (
-          <a
-            key={competitor.id}
-            href={competitor.profileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="group shrink-0"
-          >
-            <span className="relative block h-16 w-16 overflow-visible">
-              <span className="block h-16 w-16 overflow-hidden rounded-full border border-zinc-200 bg-white ring-2 ring-emerald-200/70">
-                <Avatar account={competitor} />
-              </span>
-              <span className="absolute -bottom-1 left-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm">
-                <PlatformIcon platform={toKnownPlatform(competitor.platform)} size={11} />
-              </span>
-            </span>
-            <span className="mt-1.5 block w-16 truncate text-center text-xs font-medium text-zinc-700">
-              {competitor.username}
-            </span>
-          </a>
-        ))}
+        {competitors.map((competitor) => {
+          const latestOn = !disabledLatestIds.has(competitor.id);
+          return (
+            <div key={competitor.id} className="flex shrink-0 flex-col items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setDisabledLatestIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(competitor.id)) next.delete(competitor.id);
+                    else next.add(competitor.id);
+                    return next;
+                  });
+                }}
+                className={`group shrink-0 rounded-full outline-none ring-offset-2 transition-[opacity,filter] focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  latestOn ? "opacity-100" : "opacity-45 saturate-50"
+                }`}
+                aria-pressed={latestOn}
+                aria-label={
+                  latestOn
+                    ? `Отключить ${competitor.username} из последних видео`
+                    : `Включить ${competitor.username} в последние видео`
+                }
+              >
+                <span className="relative block h-16 w-16 overflow-visible">
+                  <span className="block h-16 w-16 overflow-hidden rounded-full border border-zinc-200 bg-white ring-2 ring-emerald-200/70">
+                    <Avatar account={competitor} />
+                  </span>
+                  <span className="pointer-events-none absolute bottom-0 left-0 flex translate-y-0.5 items-end justify-start drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
+                    <PlatformIcon platform={toKnownPlatform(competitor.platform)} size={15} />
+                  </span>
+                </span>
+              </button>
+              <a
+                href={competitor.profileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`mt-1.5 block w-16 truncate text-center text-xs font-medium underline-offset-2 hover:underline ${
+                  latestOn ? "text-zinc-700" : "text-zinc-400"
+                }`}
+              >
+                {competitor.username}
+              </a>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-4 w-full rounded-2xl bg-white p-1.5 shadow-sm shadow-zinc-900/5">
@@ -339,9 +422,11 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
         >
           {loading ? null : latestVideos.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-6 py-14 text-center text-sm text-zinc-500 shadow-sm">
-              {competitors.length > 0
-                ? "Пока нет роликов конкурентов. Для Instagram загрузка появится после подключения TikHub."
-                : "Добавьте конкурентов, чтобы увидеть их последние ролики."}
+              {competitors.length === 0
+                ? "Добавьте конкурентов, чтобы увидеть их последние ролики."
+                : videos.length === 0
+                  ? "Пока нет роликов конкурентов. Для Instagram загрузка появится после подключения TikHub."
+                  : "Все профили отключены для вкладки «Последние видео». Включите хотя бы один кружок выше."}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -418,13 +503,76 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                   <th className="w-16 px-2 py-3 text-left font-medium">
                     <span className="sr-only">Превью</span>
                   </th>
-                  {[
-                    ["account", "Аккаунт", "text"],
-                    ["score", "score", "icon"],
-                    ["views", "eye", "icon"],
-                    ["likes", "heart", "icon"],
-                    ["comments", "comment", "icon"],
-                  ].map(([field, label]) => {
+                  <th className="px-4 py-3 text-left font-medium">
+                    <div ref={accountFilterRef} className="relative inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+                        onClick={() => setAccountFilterOpen((o) => !o)}
+                        aria-expanded={accountFilterOpen}
+                        aria-haspopup="true"
+                      >
+                        <span>Аккаунт</span>
+                        <svg className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-0.5 rounded-md px-0.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+                        onClick={() => onSort("account")}
+                        aria-label="Сортировать по аккаунту"
+                      >
+                        <span className={`text-[10px] ${sortField === "account" ? "text-emerald-600" : "text-zinc-400"}`}>
+                          {sortField === "account" ? (sortDirection === "asc" ? "▲" : "▼") : "↕"}
+                        </span>
+                      </button>
+                      {accountFilterOpen ? (
+                        <div
+                          className="absolute left-0 top-full z-30 mt-1 min-w-[220px] rounded-xl border border-zinc-200 bg-white py-2 shadow-lg shadow-zinc-900/10"
+                          role="dialog"
+                          aria-label="Фильтр по аккаунтам"
+                        >
+                          <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                            Показывать в таблице
+                          </p>
+                          <ul className="max-h-56 overflow-y-auto px-1">
+                            {competitors.map((c) => {
+                              const on = !disabledAllTableIds.has(c.id);
+                              return (
+                                <li key={c.id}>
+                                  <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-zinc-800 hover:bg-zinc-50">
+                                    <input
+                                      type="checkbox"
+                                      className="rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+                                      checked={on}
+                                      onChange={() => {
+                                        setDisabledAllTableIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(c.id)) next.delete(c.id);
+                                          else next.add(c.id);
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                    <span className="truncate">@{c.username}</span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  </th>
+                  {(
+                    [
+                      ["score", "score", "icon"],
+                      ["views", "eye", "icon"],
+                      ["likes", "heart", "icon"],
+                      ["comments", "comment", "icon"],
+                    ] as const
+                  ).map(([field, label]) => {
                     const active = sortField === field;
                     return (
                       <th key={field} className="px-4 py-3 text-left font-medium">
@@ -471,7 +619,14 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                       Пока нет роликов конкурентов. Добавьте YouTube-канал конкурента.
                     </td>
                   </tr>
-                ) : allVideos.map((video) => {
+                ) : tableVideos.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-zinc-500">
+                      Для всех аккаунтов в таблице включён фильтр «скрыть». Включите хотя бы один аккаунт в меню «Аккаунт».
+                    </td>
+                  </tr>
+                ) : (
+                  tableVideos.map((video) => {
                   const account = competitorsById.get(video.competitorId);
                   return (
                     <tr key={video.id} className="border-t border-zinc-100 text-zinc-700 hover:bg-zinc-50/80">
@@ -524,7 +679,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                       <td className="px-4 py-3">
                         <button
                           type="button"
-                          onClick={() => console.log("adapt", video.id)}
+                          onClick={() => onVideoClick?.(adaptCompetitorVideoToGridVideo(video, account))}
                           className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                         >
                           Адаптировать
@@ -532,7 +687,8 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                       </td>
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
           </div>
@@ -571,20 +727,11 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
             <div className="mt-4 flex justify-end">
               <button
                 type="button"
+                disabled={addSubmitting}
                 onClick={onAddCompetitor}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <span className="tabular-nums">10</span>
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path
-                    d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span>Добавить</span>
+                {addSubmitting ? "Добавляем…" : "Добавить"}
               </button>
             </div>
           </div>

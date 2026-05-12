@@ -84,6 +84,8 @@ model CompetitorAccount {
   avatarUrl         String?
   description       String?
   uploadsPlaylistId String?
+  /** Курсор TikHub v2 fetch_user_reels, если после загрузки остались страницы. */
+  lastReelsPaginationToken String?
   addedAt           DateTime          @default(now())
   lastSyncedAt      DateTime?
   createdAt         DateTime          @default(now())

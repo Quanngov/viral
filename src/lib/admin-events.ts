@@ -18,7 +18,13 @@ export type AdminEventType =
   | "admin"
   | "saved_video_add"
   | "saved_video_remove"
-  | "saved_videos_open";
+  | "saved_videos_open"
+  | "competitor_add_start"
+  | "competitor_token_spend"
+  | "tikhub_competitor_fetch_page"
+  | "tikhub_competitor_fetch_done"
+  | "competitor_videos_saved"
+  | "competitor_add_error";
 
 export type LogAdminEventInput = {
   level: AdminEventLevel;
@@ -66,7 +72,7 @@ export function safeMeta(input: unknown, depth = 0): unknown {
       out[k] = "[redacted]";
       continue;
     }
-    if (k === "raw" || k === "body" || k === "responseJson") {
+    if (k === "raw" || k === "body" || k === "responseJson" || k === "pagination_token" || k === "max_id") {
       out[k] = "[omitted_large]";
       continue;
     }

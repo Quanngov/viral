@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { detectCompetitorPlatform } from "@/lib/competitor-input";
+import { syncInstagramCompetitorReelsFromTikHub } from "@/lib/competitor-instagram-reels-sync";
+import { logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { prisma } from "@/lib/prisma";
+import { ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
 import { parseDurationToSeconds } from "@/lib/youtube";
 
 export const dynamic = "force-dynamic";
 const YT_BASE = "https://www.googleapis.com/youtube/v3";
 const MAX_COMPETITOR_VIDEO_DURATION_SECONDS = 60;
+const INSTAGRAM_COMPETITOR_TOKEN_COST = 30;
 
 type YtChannelItem = {
   id?: string;
@@ -79,6 +83,79 @@ export async function POST(req: Request) {
 
   if (platform === "instagram") {
     const externalId = username.toLowerCase();
+    const { userId, sessionKey } = await ensureSessionUser();
+
+    await logAdminEvent({
+      level: "info",
+      type: "competitor_add_start",
+      message: "Добавление Instagram-конкурента",
+      sessionId: sessionKey,
+      userId,
+      meta: safeMeta({ platform: "instagram", username: externalId }),
+    });
+
+    if (!process.env.TIKHUB_TOKEN?.trim()) {
+      await logAdminEvent({
+        level: "error",
+        type: "competitor_add_error",
+        message: "TikHub не настроен (нет TIKHUB_TOKEN)",
+        sessionId: sessionKey,
+        userId,
+        meta: safeMeta({ phase: "config", platform: "instagram" }),
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "tikhub_unconfigured",
+          message: "TikHub не настроен. Задайте TIKHUB_TOKEN в .env",
+        },
+        { status: 503 },
+      );
+    }
+
+    const spend = await spendTokens(userId, INSTAGRAM_COMPETITOR_TOKEN_COST, "competitor_instagram_add", {
+      sessionId: sessionKey,
+    });
+    if (!spend.ok) {
+      await logAdminEvent({
+        level: "warn",
+        type: "competitor_add_error",
+        message: "Недостаточно токенов для добавления Instagram-конкурента",
+        sessionId: sessionKey,
+        userId,
+        meta: safeMeta({
+          phase: "tokens",
+          required: INSTAGRAM_COMPETITOR_TOKEN_COST,
+          balance: spend.balance,
+          platform: "instagram",
+        }),
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "insufficient_tokens",
+          tokensOk: false,
+          tokensRemaining: spend.balance,
+          message: "Недостаточно внутренних токенов для добавления Instagram-конкурента (нужно 30).",
+        },
+        { status: 402 },
+      );
+    }
+
+    await logAdminEvent({
+      level: "info",
+      type: "competitor_token_spend",
+      message: "Списание токенов за добавление Instagram-конкурента",
+      sessionId: sessionKey,
+      userId,
+      meta: safeMeta({
+        amount: INSTAGRAM_COMPETITOR_TOKEN_COST,
+        balanceAfter: spend.balance,
+        platform: "instagram",
+        username: externalId,
+      }),
+    });
+
     const competitor = await prisma.competitorAccount.upsert({
       where: {
         platform_externalId: {
@@ -103,22 +180,42 @@ export async function POST(req: Request) {
         profileUrl: body.profileUrl ?? `https://www.instagram.com/${externalId}/`,
         avatarUrl: body.avatarUrl ?? null,
         description: body.description ?? null,
-        lastSyncedAt: new Date(),
       },
     });
+
+    const syncResult = await syncInstagramCompetitorReelsFromTikHub({
+      competitorId: competitor.id,
+      username: externalId,
+      userId,
+      sessionKey,
+    });
+
+    const tokensRemaining = await getTokenBalanceForUser(userId);
+
+    let message: string;
+    if (syncResult.videosLoaded > 0) {
+      message = `Конкурент добавлен, загружено ${syncResult.videosLoaded} роликов`;
+    } else if (syncResult.reelsFetchFailed) {
+      message = "Конкурент добавлен, но ролики не загрузились. Попробуйте обновить позже.";
+    } else {
+      message = "Конкурент добавлен, но ролики пока не найдены";
+    }
+
+    const fresh = await prisma.competitorAccount.findUnique({ where: { id: competitor.id } });
 
     return NextResponse.json(
       {
         ok: true,
-        competitor,
-        videosSaved: 0,
+        competitor: fresh ?? competitor,
+        videosSaved: syncResult.videosLoaded,
         videosUpdated: 0,
-        rawVideos: 0,
-        detailsFetched: 0,
-        shortsFound: 0,
+        rawVideos: syncResult.videosLoaded,
+        detailsFetched: syncResult.successfulPages,
+        shortsFound: syncResult.videosLoaded,
         uploadsPlaylistId: null,
-        message:
-          "Instagram-конкурент добавлен. Загрузка Reels будет доступна после подключения TikHub.",
+        tokensRemaining,
+        message,
+        warning: syncResult.warnings.length ? [...new Set(syncResult.warnings)].join(" ") : undefined,
       },
       { status: 201 },
     );

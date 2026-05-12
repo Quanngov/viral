@@ -1,0 +1,13 @@
+Work in token-economy mode.
+
+Rules:
+- Make only targeted changes required by the task.
+- Do not rewrite unrelated files.
+- Do not refactor architecture unless explicitly asked.
+- Do not explain obvious things.
+- Before coding, briefly list changed files.
+- After coding, give short summary: changed files, what changed, how to test.
+- Keep responses concise but not ambiguous.
+- Preserve existing UI style and project patterns.
+- For API integrations, protect quotas: cache, dedupe, no unnecessary external requests.
+- Never log secrets, tokens, full raw API responses, or huge JSON.

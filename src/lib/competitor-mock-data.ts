@@ -8,6 +8,7 @@ export type CompetitorAccount = {
   description?: string;
   addedAt: string;
   lastSyncedAt?: string;
+  lastReelsPaginationToken?: string | null;
 };
 
 export type CompetitorVideo = {

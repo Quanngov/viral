@@ -15,7 +15,7 @@ type SavedVideosSectionProps = {
 export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectionProps) {
   const [rows, setRows] = useState<SavedVideo[]>([]);
   const [loading, setLoading] = useState(false);
-  const { savedCount } = useSavedVideos();
+  const { savedCount, clearSavedListOptimisticRemovals, isOptimisticallyRemovedFromSavedList } = useSavedVideos();
   const loggedOpenRef = useRef(false);
 
   useEffect(() => {
@@ -34,6 +34,7 @@ export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectio
         const data = (await res.json()) as { videos?: SavedVideo[] };
         if (!cancelled) {
           setRows(Array.isArray(data.videos) ? data.videos : []);
+          clearSavedListOptimisticRemovals();
         }
       } catch {
         if (!cancelled) setRows([]);
@@ -44,9 +45,13 @@ export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectio
     return () => {
       cancelled = true;
     };
-  }, [isActive, savedCount]);
+  }, [isActive, savedCount, clearSavedListOptimisticRemovals]);
 
-  const gridVideos = useMemo(() => rows.map((r) => savedVideoToGridVideo(r)), [rows]);
+  const gridVideos = useMemo(() => {
+    return rows
+      .map((r) => savedVideoToGridVideo(r))
+      .filter((v) => !isOptimisticallyRemovedFromSavedList(v.id));
+  }, [rows, isOptimisticallyRemovedFromSavedList]);
 
   if (!isActive) return null;
 

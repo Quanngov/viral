@@ -25,6 +25,10 @@ type SavedVideosContextValue = {
   lastError: string | null;
   clearError: () => void;
   busyClientId: string | null;
+  /** Скрыть карточку на вкладке «Сохранённые» сразу после успешного DELETE */
+  markRemovedFromSavedList: (clientId: string) => void;
+  clearSavedListOptimisticRemovals: () => void;
+  isOptimisticallyRemovedFromSavedList: (clientId: string) => boolean;
 };
 
 const SavedVideosContext = createContext<SavedVideosContextValue | null>(null);
@@ -44,6 +48,7 @@ async function fetchSavedMap(): Promise<SavedMap> {
 
 export function SavedVideosProvider({ children }: { children: ReactNode }) {
   const [savedMap, setSavedMap] = useState<SavedMap>({});
+  const [removedSavedClientIds, setRemovedSavedClientIds] = useState<Set<string>>(() => new Set());
   const [lastError, setLastError] = useState<string | null>(null);
   const [busyClientId, setBusyClientId] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -60,6 +65,23 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
     if (!mounted.current) return;
     setSavedMap(next);
   }, []);
+
+  const markRemovedFromSavedList = useCallback((clientId: string) => {
+    setRemovedSavedClientIds((prev) => {
+      const n = new Set(prev);
+      n.add(clientId);
+      return n;
+    });
+  }, []);
+
+  const clearSavedListOptimisticRemovals = useCallback(() => {
+    setRemovedSavedClientIds(new Set());
+  }, []);
+
+  const isOptimisticallyRemovedFromSavedList = useCallback(
+    (clientId: string) => removedSavedClientIds.has(clientId),
+    [removedSavedClientIds],
+  );
 
   useEffect(() => {
     void refreshFromServer();
@@ -119,6 +141,7 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
             { method: "DELETE" },
           );
           if (!res.ok) throw new Error("delete_failed");
+          markRemovedFromSavedList(clientId);
         } else {
           const payload = gridVideoToSavePayload(video, opts);
           if (!payload) throw new Error("bad_payload");
@@ -141,7 +164,7 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
         if (mounted.current) setBusyClientId(null);
       }
     },
-    [savedMap],
+    [savedMap, markRemovedFromSavedList],
   );
 
   const savedCount = useMemo(() => Object.keys(savedMap).filter((k) => savedMap[k]).length, [savedMap]);
@@ -158,8 +181,23 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
       lastError,
       clearError,
       busyClientId,
+      markRemovedFromSavedList,
+      clearSavedListOptimisticRemovals,
+      isOptimisticallyRemovedFromSavedList,
     }),
-    [isSaved, toggle, refreshFromServer, hydrateForVideos, savedCount, lastError, clearError, busyClientId],
+    [
+      isSaved,
+      toggle,
+      refreshFromServer,
+      hydrateForVideos,
+      savedCount,
+      lastError,
+      clearError,
+      busyClientId,
+      markRemovedFromSavedList,
+      clearSavedListOptimisticRemovals,
+      isOptimisticallyRemovedFromSavedList,
+    ],
   );
 
   return <SavedVideosContext.Provider value={value}>{children}</SavedVideosContext.Provider>;
