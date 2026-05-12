@@ -15,7 +15,10 @@ export type AdminEventType =
   | "token_spend"
   | "upsert"
   | "error"
-  | "admin";
+  | "admin"
+  | "saved_video_add"
+  | "saved_video_remove"
+  | "saved_videos_open";
 
 export type LogAdminEventInput = {
   level: AdminEventLevel;

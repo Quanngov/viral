@@ -13,29 +13,40 @@ function ratingStyle(rating: number) {
 type VideoCardProps = {
   video: GridVideo;
   onOpen: () => void;
+  variant?: "compact" | "detailed";
 };
 
-function cardPlatform(v: GridVideo): "youtube" | "instagram" {
+function cardPlatform(v: GridVideo): "youtube" | "instagram" | "tiktok" {
+  if (v.platform === "tiktok") return "tiktok";
   if (v.platform === "instagram" || v.id.startsWith("instagram:")) return "instagram";
   return "youtube";
 }
 
-export function VideoCard({ video, onOpen }: VideoCardProps) {
+export function VideoCard({ video, onOpen, variant = "compact" }: VideoCardProps) {
   const platform = cardPlatform(video);
   const useNativeImg =
     platform === "instagram" ||
+    platform === "tiktok" ||
     (video.thumbnailUrl?.includes("cdninstagram") ?? false) ||
     (video.thumbnailUrl?.includes("fbcdn.net") ?? false);
 
   const rating = video.score ?? video.rating;
+  const detailed = variant === "detailed";
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
       className="group relative block w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm shadow-zinc-900/5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-zinc-900/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
     >
-      <div className="relative aspect-[3/4] w-full">
+      <div className="relative aspect-[3/4] w-full overflow-hidden">
         {useNativeImg ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -50,15 +61,15 @@ export function VideoCard({ video, onOpen }: VideoCardProps) {
             alt=""
             fill
             sizes="(min-width: 1280px) 22vw, (min-width: 768px) 33vw, 100vw"
-            className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
         )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
-        <span className="pointer-events-none absolute left-2.5 top-2.5 rounded-md bg-black/45 p-0.5 shadow-md backdrop-blur-[2px]">
+        <span className="pointer-events-none absolute left-2.5 top-2.5 rounded-md bg-black/50 p-0.5 shadow-md">
           <PlatformIcon platform={platform} size={18} className="block" />
         </span>
         <span
-          className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[1.9rem] items-center justify-center rounded-lg border px-1.5 py-0.5 text-sm font-semibold tabular-nums shadow-md backdrop-blur-[2px] transition-transform duration-200 group-hover:scale-[1.02] ${ratingStyle(rating)}`}
+          className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[1.9rem] items-center justify-center rounded-lg border px-1.5 py-0.5 text-sm font-semibold tabular-nums shadow-md transition-transform duration-200 group-hover:scale-[1.02] ${ratingStyle(rating)}`}
           title="Оценка ролика (0–99)"
         >
           {rating}
@@ -70,6 +81,11 @@ export function VideoCard({ video, onOpen }: VideoCardProps) {
           </span>
         </div>
       </div>
-    </button>
+      {detailed ? (
+        <div className="border-t border-zinc-100 p-3">
+          <p className="line-clamp-2 text-sm font-semibold leading-snug text-zinc-900">{video.title}</p>
+        </div>
+      ) : null}
+    </div>
   );
 }

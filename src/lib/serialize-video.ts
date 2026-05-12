@@ -45,6 +45,9 @@ export function videoToClientJson(v: Video) {
     engagementRate: Math.round(v.engagementRate * 1e6) / 1e6,
     language: v.language,
     region: v.region,
+    viewsCount: v.views,
+    likesCount: v.likes,
+    durationSeconds: v.durationSeconds,
   };
 }
 

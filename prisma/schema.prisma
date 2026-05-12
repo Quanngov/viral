@@ -130,6 +130,36 @@ model SessionUser {
 
   userTokenBalance  UserTokenBalance?
   tokenTransactions TokenTransaction[]
+  savedVideos       SavedVideo[]
+}
+
+model SavedVideo {
+  id                 String      @id @default(cuid())
+  userId             String
+  user               SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform           String
+  externalId         String
+  title              String
+  description        String?
+  url                String
+  videoUrl           String?
+  thumbnailUrl       String?
+  authorUsername     String?
+  authorDisplayName  String?
+  authorAvatarUrl    String?
+  views              Int?
+  likes              Int?
+  comments           Int?
+  shares             Int?
+  rating             Int?
+  publishedAt        DateTime?
+  durationSeconds    Int?
+  sourceType         String?
+  sourceId           String?
+  createdAt          DateTime    @default(now())
+
+  @@unique([userId, platform, externalId])
+  @@index([userId, createdAt])
 }
 
 model UserTokenBalance {

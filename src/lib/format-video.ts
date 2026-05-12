@@ -4,8 +4,21 @@ export function formatViewsCount(n: number): string {
   return String(n);
 }
 
+function toValidDate(input: Date | string | number | null | undefined): Date | null {
+  if (input == null) return null;
+  if (input instanceof Date) {
+    const t = input.getTime();
+    return Number.isNaN(t) ? null : input;
+  }
+  const d = new Date(input);
+  const t = d.getTime();
+  return Number.isNaN(t) ? null : d;
+}
+
 /** Короткая подпись возраста для карточки («2 дн назад», «3 нед назад»). */
-export function formatAgeCompactRu(date: Date): string {
+export function formatAgeCompactRu(input?: Date | string | number | null): string {
+  const date = toValidDate(input);
+  if (!date) return "—";
   const diff = Date.now() - date.getTime();
   if (diff < 60_000) return "щас";
   const mins = Math.floor(diff / 60_000);
@@ -22,7 +35,9 @@ export function formatAgeCompactRu(date: Date): string {
   return `${years} г назад`;
 }
 
-export function formatRelativeRu(date: Date): string {
+export function formatRelativeRu(input?: Date | string | number | null): string {
+  const date = toValidDate(input);
+  if (!date) return "дата неизвестна";
   const diff = Date.now() - date.getTime();
   if (diff < 60_000) return "только что";
   const mins = Math.floor(diff / 60_000);

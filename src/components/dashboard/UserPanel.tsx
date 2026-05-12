@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { MockUser } from "@/lib/mock-data";
 
-export type DashboardView = "home" | "competitors";
+export type DashboardView = "home" | "competitors" | "saved";
 
 const tools: { key: string; label: string; view?: DashboardView; soon?: boolean; icon: ReactNode }[] = [
   {
@@ -26,20 +26,25 @@ const tools: { key: string; label: string; view?: DashboardView; soon?: boolean;
     ),
   },
   {
+    key: "saved",
+    label: "Сохраненные ролики",
+    view: "saved",
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.65} stroke="currentColor" aria-hidden>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M6 4.5h12A1.5 1.5 0 0 1 19.5 6v15.75L12 17.25l-7.5 4.5V6A1.5 1.5 0 0 1 6 4.5Z"
+        />
+      </svg>
+    ),
+  },
+  {
     key: "scripts",
     label: "Генерация сценариев",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9 3 3m0 0 3-3m-3 3v.008M12 15h.008v.008H12V15Zm-3 6h6a2.25 2.25 0 0 0 2.25-2.25V13.5a2.25 2.25 0 0 0-2.25-2.25H9A2.25 2.25 0 0 0 6.75 13.5V18A2.25 2.25 0 0 0 9 20.25Z" />
-      </svg>
-    ),
-  },
-  {
-    key: "favorites",
-    label: "Избранное",
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.385a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
       </svg>
     ),
   },

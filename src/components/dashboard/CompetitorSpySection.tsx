@@ -10,6 +10,7 @@ import {
 import { detectCompetitorPlatform } from "@/lib/competitor-input";
 import { videoClientId } from "@/lib/video-client-id";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 
 type CompetitorMode = "latest" | "all";
 type SortField = "account" | "views" | "likes" | "comments" | "score";
@@ -57,16 +58,21 @@ function adaptCompetitorVideoToGridVideo(
   account?: CompetitorAccount,
 ): GridVideo {
   const channelLabel = account?.displayName || account?.username || video.competitor?.displayName || "Competitor";
-  const ext = video.externalId ?? video.id;
-  const id =
-    video.platform === "youtube"
-      ? videoClientId("youtube", ext)
-      : `competitor:${video.platform}:${video.id}`;
+  const platRaw = video.platform;
+  const plat: NonNullable<GridVideo["platform"]> =
+    platRaw === "youtube" ? "youtube" : platRaw === "tiktok" ? "tiktok" : "instagram";
+  const ext = (video.externalId ?? video.id).trim();
+  const id = videoClientId(plat, ext);
+
   return {
     id,
-    platform: video.platform === "instagram" ? "instagram" : "youtube",
+    platform: plat,
+    externalId: ext,
+    youtubeId: plat === "youtube" ? ext : null,
     title: video.title ?? video.caption ?? "—",
     channel: channelLabel,
+    authorUsername: account?.username ?? video.competitor?.username ?? null,
+    authorAvatarUrl: account?.avatarUrl ?? video.competitor?.avatarUrl ?? null,
     description: video.description ?? video.caption ?? "",
     views: formatCompactCount(video.views),
     likes: formatCompactCount(video.likes),
@@ -81,6 +87,10 @@ function adaptCompetitorVideoToGridVideo(
     comments: video.comments,
     viewsPerHour: video.viewsPerHour ?? 0,
     engagementRate: video.engagementRate ?? 0,
+    viewsCount: video.views,
+    likesCount: video.likes,
+    durationSeconds: video.durationSeconds,
+    savedFrom: { sourceType: "competitor", sourceId: video.competitorId },
   };
 }
 
@@ -118,7 +128,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(8);
-  const [savedVideoIds, setSavedVideoIds] = useState<string[]>([]);
+  const { hydrateForVideos } = useSavedVideos();
 
   const competitorsById = useMemo(() => {
     const map = new Map<string, CompetitorAccount>();
@@ -157,6 +167,11 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
       return sortDirection === "asc" ? cmp : -cmp;
     });
   }, [videos, competitorsById, sortField, sortDirection]);
+
+  useEffect(() => {
+    const grids = videos.map((v) => adaptCompetitorVideoToGridVideo(v, competitorsById.get(v.competitorId)));
+    void hydrateForVideos(grids);
+  }, [videos, competitorsById, hydrateForVideos]);
 
   function onSort(nextField: SortField) {
     setSortDirection((prev) =>
@@ -344,7 +359,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                         alt=""
                         fill
                         sizes="(min-width: 1280px) 22vw, (min-width: 768px) 33vw, 100vw"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-cover object-center"
                       />
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
                       <span className="pointer-events-none absolute left-2.5 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/95 shadow-sm">
@@ -447,13 +462,12 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                   })}
                   <th className="px-4 py-3 text-left font-medium">Ссылка</th>
                   <th className="px-4 py-3 text-left font-medium">Адаптировать</th>
-                  <th className="px-4 py-3 text-left font-medium">Сохранить</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? null : allVideos.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-sm text-zinc-500">
+                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-zinc-500">
                       Пока нет роликов конкурентов. Добавьте YouTube-канал конкурента.
                     </td>
                   </tr>
@@ -469,7 +483,13 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                       <td className="px-2 py-3">
                         <div className="relative h-12 w-9 overflow-hidden rounded-md bg-zinc-100 ring-1 ring-zinc-200">
                           {video.thumbnailUrl ? (
-                            <Image src={video.thumbnailUrl} alt="" fill sizes="36px" className="object-cover" />
+                            <Image
+                              src={video.thumbnailUrl}
+                              alt=""
+                              fill
+                              sizes="36px"
+                              className="h-full w-full object-cover object-center"
+                            />
                           ) : null}
                         </div>
                       </td>
@@ -508,27 +528,6 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                           className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                         >
                           Адаптировать
-                        </button>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSavedVideoIds((prev) =>
-                              prev.includes(video.id) ? prev.filter((id) => id !== video.id) : [...prev, video.id],
-                            );
-                          }}
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
-                            savedVideoIds.includes(video.id)
-                              ? "border-emerald-600 bg-emerald-600 text-white"
-                              : "border-zinc-200 bg-white text-zinc-600 hover:border-emerald-300 hover:text-emerald-800"
-                          }`}
-                          aria-label="Сохранить ролик"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 4.5h13.5A1.5 1.5 0 0 1 20.25 6v14.25L12 16.5l-8.25 3.75V6a1.5 1.5 0 0 1 1.5-1.5Z" />
-                          </svg>
                         </button>
                       </td>
                     </tr>

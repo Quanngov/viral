@@ -4,6 +4,7 @@ import { memo, useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import type { GridVideo } from "@/lib/mock-data";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { SaveBookmarkButton } from "@/components/dashboard/SaveBookmarkButton";
 import { formatViewsCount } from "@/lib/format-video";
 
 type VideoDetailPanelProps = {
@@ -11,11 +12,13 @@ type VideoDetailPanelProps = {
   onClose: () => void;
 };
 
-function resolvePlatform(video: GridVideo): "youtube" | "instagram" {
+function resolvePlatform(video: GridVideo): "youtube" | "instagram" | "tiktok" {
+  if (video.platform === "tiktok" || video.id.startsWith("tiktok:")) return "tiktok";
   if (video.platform === "instagram" || video.id.startsWith("instagram:")) return "instagram";
   if (video.platform === "youtube" || video.id.startsWith("youtube:")) return "youtube";
   const u = (video.url ?? "").toLowerCase();
   if (u.includes("instagram")) return "instagram";
+  if (u.includes("tiktok")) return "tiktok";
   return "youtube";
 }
 
@@ -54,6 +57,7 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
 
   const thumbIsIg =
     platform === "instagram" ||
+    platform === "tiktok" ||
     (video.thumbnailUrl?.includes("cdninstagram") ?? false) ||
     (video.thumbnailUrl?.includes("fbcdn.net") ?? false);
 
@@ -74,16 +78,24 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
           <h2 className="line-clamp-2 pr-2 text-lg font-semibold leading-snug tracking-tight text-zinc-900 md:text-xl">
             {video.title}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-xl bg-zinc-100 p-2 text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-900"
-            aria-label="Закрыть"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <SaveBookmarkButton
+              variant="detail"
+              video={video}
+              sourceType={video.savedFrom?.sourceType ?? "feed"}
+              sourceId={video.savedFrom?.sourceId ?? null}
+            />
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl bg-zinc-100 p-2 text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-900"
+              aria-label="Закрыть"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 max-h-[85vh] overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -170,8 +182,10 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
                   k="Платформа"
                   v={
                     <span className="inline-flex items-center gap-1.5">
-                      <PlatformIcon platform={platform === "youtube" ? "youtube" : "instagram"} size={16} />
-                      <span className="sr-only">{platform === "youtube" ? "YouTube" : "Instagram"}</span>
+                      <PlatformIcon platform={platform} size={16} />
+                      <span className="sr-only">
+                        {platform === "youtube" ? "YouTube" : platform === "tiktok" ? "TikTok" : "Instagram"}
+                      </span>
                     </span>
                   }
                 />
@@ -244,12 +258,6 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
                   className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
                 >
                   Сценарий
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
-                >
-                  В избранное
                 </button>
                 <button
                   type="button"

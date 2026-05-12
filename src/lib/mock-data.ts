@@ -16,11 +16,12 @@ export type WeeklyTrend = {
 
 export type GridVideo = {
   id: string;
-  platform?: "youtube" | "instagram";
+  platform?: "youtube" | "instagram" | "tiktok";
   youtubeId?: string | null;
   videoUrl?: string | null;
   title: string;
   channel: string;
+  authorUsername?: string | null;
   description?: string;
   views: string;
   likes: string;
@@ -37,11 +38,19 @@ export type GridVideo = {
   viralLabel: "High Viral" | "Rising" | "Stable";
   thumbnailUrl: string;
   url?: string;
+  externalId?: string;
   comments?: number;
   viewsPerHour?: number;
   engagementRate?: number;
   language?: string | null;
   region?: string | null;
+  /** Числовые значения для сохранения в БД (снапшот). */
+  viewsCount?: number;
+  likesCount?: number;
+  authorAvatarUrl?: string | null;
+  durationSeconds?: number;
+  /** Откуда сохранён / открыт (для модалки). */
+  savedFrom?: { sourceType: "feed" | "competitor" | "unknown"; sourceId?: string | null };
 };
 
 export type MockUser = {

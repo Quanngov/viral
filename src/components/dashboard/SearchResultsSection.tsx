@@ -12,6 +12,7 @@ import {
   type SearchGridFilters,
 } from "@/components/dashboard/search-results-utils";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
+import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 
 type SearchResultsSectionProps = {
   searchCost: number;
@@ -25,6 +26,7 @@ type FeedSession = {
 };
 
 export function SearchResultsSection({ searchCost, onVideoClick }: SearchResultsSectionProps) {
+  const { hydrateForVideos, lastError, clearError } = useSavedVideos();
   const [sourceVideos, setSourceVideos] = useState<GridVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const [boot, setBoot] = useState(true);
@@ -47,6 +49,11 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
     const filtered = applyVideoFilters(sourceVideos, filters);
     return buildDisplayOrder(filtered);
   }, [sourceVideos, filters]);
+
+  useEffect(() => {
+    if (sourceVideos.length === 0) return;
+    void hydrateForVideos(sourceVideos);
+  }, [sourceVideos, hydrateForVideos]);
 
   useEffect(() => {
     let cancel = false;
@@ -252,6 +259,14 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
       />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {lastError ? (
+        <p className="text-sm text-amber-800">
+          {lastError}{" "}
+          <button type="button" className="underline" onClick={clearError}>
+            Закрыть
+          </button>
+        </p>
+      ) : null}
 
       {!boot && noMore && session && videos.length === 0 ? (
         <p className="text-sm text-zinc-600">Пока больше роликов нет.</p>
@@ -267,7 +282,11 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
         </div>
       ) : (
         <>
-          <VideoGrid videos={displayedVideos} loading={busy} onVideoClick={onVideoClick} />
+          <VideoGrid
+            videos={displayedVideos}
+            loading={busy}
+            onVideoClick={onVideoClick}
+          />
           {showLoadMore ? (
             <div className="mt-1 flex justify-center">
               <button

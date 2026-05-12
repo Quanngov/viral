@@ -29,6 +29,7 @@ export type CompetitorVideo = {
   engagementRate?: number;
   publishedAt: string;
   createdAt: string;
+  durationSeconds?: number;
 };
 
 export const mockCompetitorAccounts: CompetitorAccount[] = [
