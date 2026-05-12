@@ -1,11 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GridVideo } from "@/lib/mock-data";
-import type { ApiSort } from "@/lib/search-query";
+import type { FeedPlatformMode } from "@/lib/search-query";
 import { uiLocaleToApi, uiPeriodToApi } from "@/lib/search-query";
 import { SearchToolbar } from "@/components/dashboard/SearchToolbar";
-import type { SearchFiltersPayload } from "@/components/dashboard/SearchToolbar";
+import type { SearchFiltersPayload, SearchSubmitPayload } from "@/components/dashboard/SearchToolbar";
+import {
+  applyVideoFilters,
+  buildDisplayOrder,
+  type SearchGridFilters,
+} from "@/components/dashboard/search-results-utils";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
 
 type SearchResultsSectionProps = {
@@ -13,187 +18,53 @@ type SearchResultsSectionProps = {
   onVideoClick?: (video: GridVideo) => void;
 };
 
+type FeedSession = {
+  q: string;
+  platform: FeedPlatformMode;
+  locale: string;
+};
+
 export function SearchResultsSection({ searchCost, onVideoClick }: SearchResultsSectionProps) {
   const [sourceVideos, setSourceVideos] = useState<GridVideo[]>([]);
-  const [videos, setVideos] = useState<GridVideo[]>([]);
-  const [visibleCount, setVisibleCount] = useState(8);
   const [loading, setLoading] = useState(false);
   const [boot, setBoot] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [searchSource, setSearchSource] = useState<"cache" | "youtube" | null>(null);
-  const [filters, setFilters] = useState<{
-    languageMode: "world" | "ru" | "en";
-    sort: ApiSort;
-    period: "today" | "yesterday" | "week" | "month" | "year" | "all";
-    minViews: 0 | 1000 | 10000 | 50000 | 100000 | 1000000;
-  }>({
+  const [tokensRemaining, setTokensRemaining] = useState<number | null>(null);
+  const [session, setSession] = useState<FeedSession | null>(null);
+  const [noMore, setNoMore] = useState(false);
+  const feedBatchIndexRef = useRef(1);
+
+  const [filters, setFilters] = useState<SearchGridFilters>({
     languageMode: "world",
     sort: "viral_desc",
-    period: "week",
+    period: "month",
     minViews: 0,
+    platformMode: "all",
   });
 
-  function parseViews(views: string): number {
-    const s = views.trim().toUpperCase().replaceAll(" ", "").replaceAll(",", ".");
-    const m = s.match(/^([\d.]+)([KMBКМ]?)$/);
-    if (!m) {
-      const n = Number(s.replace(/[^\d]/g, ""));
-      return Number.isFinite(n) ? n : 0;
-    }
-    const value = Number(m[1]);
-    if (!Number.isFinite(value)) return 0;
-    const suffix = m[2];
-    if (suffix === "K" || suffix === "К") return Math.round(value * 1_000);
-    if (suffix === "M" || suffix === "М") return Math.round(value * 1_000_000);
-    if (suffix === "B") return Math.round(value * 1_000_000_000);
-    return Math.round(value);
-  }
-
-  function getPublishedDate(v: GridVideo): Date | null {
-    if (v.publishedAtIso) {
-      const d = new Date(v.publishedAtIso);
-      if (!Number.isNaN(d.getTime())) return d;
-    }
-    return null;
-  }
-
-  function isWithinPeriod(videoDate: Date | null, period: typeof filters.period): boolean {
-    if (period === "all" || !videoDate) return true;
-    const now = new Date();
-    const msDiff = now.getTime() - videoDate.getTime();
-    switch (period) {
-      case "today":
-        return now.toDateString() === videoDate.toDateString();
-      case "yesterday": {
-        const y = new Date(now);
-        y.setDate(y.getDate() - 1);
-        return y.toDateString() === videoDate.toDateString();
-      }
-      case "week":
-        return msDiff <= 7 * 24 * 3600 * 1000;
-      case "month":
-        return msDiff <= 30 * 24 * 3600 * 1000;
-      case "year":
-        return msDiff <= 365 * 24 * 3600 * 1000;
-      default:
-        return true;
-    }
-  }
-
-  function hasCyrillic(s: string): boolean {
-    return /[А-Яа-яЁё]/.test(s);
-  }
-
-  function applyVideoFilters(
-    inputVideos: GridVideo[],
-    active: typeof filters,
-  ): GridVideo[] {
-    const list = [...inputVideos];
-    const filtered = list.filter((v) => {
-      const views = parseViews(v.views);
-      if (views < active.minViews) return false;
-
-      if (!isWithinPeriod(getPublishedDate(v), active.period)) return false;
-
-      if (active.languageMode !== "world") {
-        const lang = (v.language ?? "").toLowerCase();
-        const region = (v.region ?? "").toUpperCase();
-        const text = `${v.title} ${v.description ?? ""} ${v.summary ?? ""} ${v.channel}`.trim();
-        const cyr = hasCyrillic(text);
-        if (active.languageMode === "ru") {
-          if (lang || region) {
-            if (!(lang === "ru" || region === "RU")) return false;
-          } else if (!cyr) {
-            return false;
-          }
-        } else if (active.languageMode === "en") {
-          if (lang || region) {
-            if (!(lang === "en" || region === "US")) return false;
-          } else if (cyr) {
-            return false;
-          }
-        }
-      }
-
-      return true;
-    });
-
-    filtered.sort((a, b) => {
-      const av = parseViews(a.views);
-      const bv = parseViews(b.views);
-      const ad = getPublishedDate(a)?.getTime() ?? 0;
-      const bd = getPublishedDate(b)?.getTime() ?? 0;
-      const as = a.score ?? null;
-      const bs = b.score ?? null;
-      const aviral = a.viralScore ?? 0;
-      const bviral = b.viralScore ?? 0;
-
-      switch (active.sort) {
-        case "views_desc":
-          return bv - av;
-        case "views_asc":
-          return av - bv;
-        case "date_desc":
-          return bd - ad;
-        case "date_asc":
-          return ad - bd;
-        case "viral_desc":
-          if (as != null && bs != null) return bs - as;
-          return bviral - aviral;
-        case "viral_asc":
-          if (as != null && bs != null) return as - bs;
-          return aviral - bviral;
-        default:
-          return 0;
-      }
-    });
-
-    return filtered;
-  }
-
-  function shuffle<T>(arr: T[]): T[] {
-    const copy = [...arr];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  }
-
-  function scoreValue(v: GridVideo): number {
-    return typeof v.score === "number" ? v.score : 0;
-  }
-
-  function buildDisplayOrder(inputVideos: GridVideo[]): GridVideo[] {
-    if (inputVideos.length <= 1) return inputVideos;
-    const byScore = new Map<number, GridVideo[]>();
-    for (const v of inputVideos) {
-      const s = scoreValue(v);
-      const bucket = byScore.get(s);
-      if (bucket) bucket.push(v);
-      else byScore.set(s, [v]);
-    }
-    const orderedScores = Array.from(byScore.keys()).sort((a, b) => b - a);
-    const out: GridVideo[] = [];
-    for (const s of orderedScores) {
-      out.push(...shuffle(byScore.get(s) ?? []));
-    }
-    return out;
-  }
+  const videos = useMemo(() => {
+    const filtered = applyVideoFilters(sourceVideos, filters);
+    return buildDisplayOrder(filtered);
+  }, [sourceVideos, filters]);
 
   useEffect(() => {
     let cancel = false;
     async function loadHome() {
       try {
-        const res = await fetch("/api/videos/home?limit=50");
-        const data = (await res.json()) as {
+        const [homeRes, tokRes] = await Promise.all([
+          fetch("/api/videos/home?limit=50"),
+          fetch("/api/tokens"),
+        ]);
+        const data = (await homeRes.json()) as {
           videos?: GridVideo[];
           totalCount?: number;
         };
+        const tok = (await tokRes.json()) as { balance?: number };
         if (!cancel) {
           setSourceVideos(Array.isArray(data.videos) ? data.videos : []);
           setTotalCount(typeof data.totalCount === "number" ? data.totalCount : 0);
+          if (typeof tok.balance === "number") setTokensRemaining(tok.balance);
         }
       } catch {
         if (!cancel) {
@@ -210,79 +81,141 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
     };
   }, []);
 
-  async function runSearch(payload: {
-    q: string;
-    locale: string;
-    period: string;
-    sort: ApiSort;
-    minViews: number;
-  }) {
+  function localeToLanguageMode(locale: string): "world" | "ru" | "en" {
+    if (locale === "Русский") return "ru";
+    if (locale === "Английский") return "en";
+    return "world";
+  }
+
+  async function postFeed(body: Record<string, unknown>) {
+    const res = await fetch("/api/videos/feed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, tokenCost: searchCost }),
+    });
+    const data = (await res.json()) as {
+      videos?: GridVideo[];
+      totalCount?: number;
+      tokensOk?: boolean;
+      tokensRemaining?: number;
+      noMore?: boolean;
+      message?: string;
+      error?: string;
+    };
+    return { res, data };
+  }
+
+  async function runSearch(payload: SearchSubmitPayload) {
     const q = payload.q.trim();
     if (!q) return;
 
     setLoading(true);
     setError(null);
+    setNoMore(false);
 
     try {
       const { region, language } = uiLocaleToApi(payload.locale);
       const period = uiPeriodToApi(payload.period);
+      const languageMode = localeToLanguageMode(payload.locale);
 
-      const params = new URLSearchParams({
+      const { res, data } = await postFeed({
+        action: "search",
         q,
-        region: region ?? "",
-        language: language ?? "",
-        sort: payload.sort,
+        platform: payload.platform,
+        seenIds: [],
+        batchIndex: 0,
         period,
-        minViews: String(payload.minViews),
+        sort: payload.sort,
+        minViews: payload.minViews,
+        languageMode,
+        region,
+        language,
       });
 
-      const res = await fetch(`/api/youtube/search?${params.toString()}`);
-      const data = (await res.json()) as {
-        source?: string;
-        videos?: GridVideo[];
-        totalCount?: number;
-        foundCount?: number;
-        message?: string;
-        error?: string;
-      };
+      if (typeof data.tokensRemaining === "number") setTokensRemaining(data.tokensRemaining);
+
+      if (res.status === 402 || data.tokensOk === false) {
+        setError(data.message || "Недостаточно внутренних токенов");
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(data.message || data.error || `Ошибка ${res.status}`);
       }
 
-      setSearchSource(data.source === "cache" ? "cache" : data.source === "youtube" ? "youtube" : null);
+      setSession({ q, platform: payload.platform, locale: payload.locale });
+      feedBatchIndexRef.current = 1;
       setSourceVideos(Array.isArray(data.videos) ? data.videos : []);
+      setNoMore(Boolean(data.noMore));
       if (typeof data.totalCount === "number") setTotalCount(data.totalCount);
     } catch (e) {
-      setSearchSource(null);
       setError(e instanceof Error ? e.message : "Не удалось выполнить поиск");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    const filtered = applyVideoFilters(sourceVideos, filters);
-    setVideos(buildDisplayOrder(filtered));
-    setVisibleCount(8);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceVideos, filters]);
+  async function loadMore() {
+    if (!session || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const { region, language } = uiLocaleToApi(session.locale);
+      const languageMode = filters.languageMode;
+
+      const { res, data } = await postFeed({
+        action: "more",
+        q: session.q,
+        platform: session.platform,
+        seenIds: sourceVideos.map((v) => v.id),
+        batchIndex: feedBatchIndexRef.current,
+        period: filters.period,
+        sort: filters.sort,
+        minViews: filters.minViews,
+        languageMode,
+        region,
+        language,
+      });
+
+      if (typeof data.tokensRemaining === "number") setTokensRemaining(data.tokensRemaining);
+
+      if (res.status === 402 || data.tokensOk === false) {
+        setError(data.message || "Недостаточно внутренних токенов");
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.message || data.error || `Ошибка ${res.status}`);
+      }
+
+      const chunk = Array.isArray(data.videos) ? data.videos : [];
+      if (chunk.length === 0 && data.noMore) {
+        setNoMore(true);
+        setError(null);
+      } else {
+        setSourceVideos((prev) => [...prev, ...chunk]);
+        feedBatchIndexRef.current += 1;
+        setNoMore(Boolean(data.noMore));
+      }
+      if (typeof data.totalCount === "number") setTotalCount(data.totalCount);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось догрузить ролики");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const onFiltersChange = useCallback((payload: SearchFiltersPayload) => {
     const period = uiPeriodToApi(payload.period);
-    const languageMode =
-      payload.locale === "Русский"
-        ? "ru"
-        : payload.locale === "Английский"
-          ? "en"
-          : "world";
+    const languageMode = localeToLanguageMode(payload.locale);
     const nextMinViews = payload.minViews as 0 | 1000 | 10000 | 50000 | 100000 | 1000000;
     setFilters((prev) => {
       if (
         prev.languageMode === languageMode &&
         prev.sort === payload.sort &&
         prev.period === period &&
-        prev.minViews === nextMinViews
+        prev.minViews === nextMinViews &&
+        prev.platformMode === payload.platform
       ) {
         return prev;
       }
@@ -291,19 +224,22 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
         sort: payload.sort,
         period,
         minViews: nextMinViews,
+        platformMode: payload.platform,
       };
     });
   }, []);
 
   const busy = loading || boot;
-  const displayedVideos = videos.slice(0, visibleCount);
+  const displayedVideos = videos;
+  const showLoadMore = Boolean(session) && !busy && !noMore;
 
   const statsParts: string[] = [];
   if (totalCount !== null) {
     statsParts.push(`В базе: ${totalCount} роликов`);
-    statsParts.push(`Показано: ${videos.length} из ${sourceVideos.length}`);
-    if (searchSource === "cache") statsParts.push("из кэша");
-    else if (searchSource === "youtube") statsParts.push("обновлено сейчас");
+    statsParts.push(`В подборке: ${videos.length} из ${sourceVideos.length}`);
+  }
+  if (tokensRemaining !== null) {
+    statsParts.push(`Токены: ${tokensRemaining.toLocaleString("ru-RU")}`);
   }
 
   return (
@@ -317,43 +253,52 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-      {!boot && statsParts.length > 0 ? (
-        <p className="text-xs text-zinc-600">
-          {statsParts.slice(0, 2).join(" • ")}
-          {statsParts[2] ? ` • ${statsParts[2]}` : ""}
-        </p>
+      {!boot && noMore && session && videos.length === 0 ? (
+        <p className="text-sm text-zinc-600">Пока больше роликов нет.</p>
       ) : null}
 
-      {!busy && videos.length === 0 ? (
+      {!boot && statsParts.length > 0 ? (
+        <p className="text-xs text-zinc-600">{statsParts.join(" • ")}</p>
+      ) : null}
+
+      {!busy && videos.length === 0 && !session ? (
         <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-6 py-16 text-center text-sm text-zinc-500 shadow-sm">
           В базе пока нет роликов. Выполните первый поиск.
         </div>
       ) : (
         <>
           <VideoGrid videos={displayedVideos} loading={busy} onVideoClick={onVideoClick} />
-          {!busy && videos.length > visibleCount ? (
+          {showLoadMore ? (
             <div className="mt-1 flex justify-center">
               <button
                 type="button"
-                onClick={() => setVisibleCount((v) => v + 8)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
+                onClick={loadMore}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                disabled={loading}
               >
-                <span className="tabular-nums">5</span>
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path
-                    d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span>Загрузить еще</span>
+                <LightningIcon className="h-4 w-4 text-emerald-100" />
+                <span className="tabular-nums">{searchCost}</span>
+                <span className="text-emerald-100">·</span>
+                <span>Показать еще</span>
               </button>
             </div>
           ) : null}
         </>
       )}
     </div>
+  );
+}
+
+function LightningIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

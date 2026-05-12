@@ -14,13 +14,17 @@ export function sortVideosList(videos: Video[], sort: ApiSort): Video[] {
       return copy.sort((a, b) => a.publishedAt.getTime() - b.publishedAt.getTime());
     case "viral_desc":
       return copy.sort((a, b) => {
-        const ds = b.score - a.score;
+        const ra = a.rating > 0 ? a.rating : a.score;
+        const rb = b.rating > 0 ? b.rating : b.score;
+        const ds = rb - ra;
         if (ds !== 0) return ds;
         return b.rawScore - a.rawScore;
       });
     case "viral_asc":
       return copy.sort((a, b) => {
-        const ds = a.score - b.score;
+        const ra = a.rating > 0 ? a.rating : a.score;
+        const rb = b.rating > 0 ? b.rating : b.score;
+        const ds = ra - rb;
         if (ds !== 0) return ds;
         return a.rawScore - b.rawScore;
       });

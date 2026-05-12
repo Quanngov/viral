@@ -1,13 +1,23 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import type { GridVideo } from "@/lib/mock-data";
+import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { formatViewsCount } from "@/lib/format-video";
 
 type VideoDetailPanelProps = {
   video: GridVideo | null;
   onClose: () => void;
 };
+
+function resolvePlatform(video: GridVideo): "youtube" | "instagram" {
+  if (video.platform === "instagram" || video.id.startsWith("instagram:")) return "instagram";
+  if (video.platform === "youtube" || video.id.startsWith("youtube:")) return "youtube";
+  const u = (video.url ?? "").toLowerCase();
+  if (u.includes("instagram")) return "instagram";
+  return "youtube";
+}
 
 export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose }: VideoDetailPanelProps) {
   const [playInModal, setPlayInModal] = useState(false);
@@ -28,21 +38,24 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
   }, [video, onClose]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- сброс плеера при смене ролика
     setPlayInModal(false);
     setIsDescriptionOpen(false);
   }, [video?.id]);
 
-  const platform = (() => {
-    const u = (video?.url ?? "").toLowerCase();
-    if (u.includes("instagram")) return "instagram";
-    return "youtube";
-  })();
-
   if (!video) return null;
 
-  const youtubeId = video.id;
+  const platform = resolvePlatform(video);
+  const youtubeId =
+    video.youtubeId ?? (video.id.startsWith("youtube:") ? video.id.slice("youtube:".length) : null);
   const canEmbedYoutube = platform === "youtube" && Boolean(youtubeId);
   const embedUrl = canEmbedYoutube ? `https://www.youtube.com/embed/${youtubeId}` : "";
+  const canPlayMp4 = Boolean(video.videoUrl?.trim());
+
+  const thumbIsIg =
+    platform === "instagram" ||
+    (video.thumbnailUrl?.includes("cdninstagram") ?? false) ||
+    (video.thumbnailUrl?.includes("fbcdn.net") ?? false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
@@ -77,7 +90,16 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.42fr_0.58fr]">
             <div>
               <div className="relative aspect-[9/16] overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-900/5">
-                {playInModal && canEmbedYoutube ? (
+                {playInModal && canPlayMp4 ? (
+                  <video
+                    src={video.videoUrl!}
+                    controls
+                    className="h-full w-full object-contain bg-black"
+                    playsInline
+                  >
+                    <track kind="captions" />
+                  </video>
+                ) : playInModal && canEmbedYoutube ? (
                   <iframe
                     src={embedUrl}
                     title={video.title}
@@ -88,15 +110,25 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
                   />
                 ) : (
                   <>
-                    <Image
-                      src={video.thumbnailUrl}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      sizes="420px"
-                      loading="lazy"
-                    />
-                    {canEmbedYoutube ? (
+                    {thumbIsIg ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={video.thumbnailUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Image
+                        src={video.thumbnailUrl}
+                        alt=""
+                        fill
+                        className="object-cover"
+                        sizes="420px"
+                        loading="lazy"
+                      />
+                    )}
+                    {canPlayMp4 || canEmbedYoutube ? (
                       <button
                         type="button"
                         onClick={() => setPlayInModal(true)}
@@ -129,8 +161,20 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
                 <StatCell k="Просмотры" v={video.views} />
                 <StatCell k="Лайки" v={video.likes} />
                 <StatCell k="Комментарии" v={String(video.comments ?? "—")} />
+                <StatCell
+                  k="Репосты"
+                  v={typeof video.shares === "number" ? formatViewsCount(video.shares) : "—"}
+                />
                 <StatCell k="Дата публикации" v={video.publishedAt} />
-                <StatCell k="Платформа" v={platform === "youtube" ? "YouTube" : "Instagram"} />
+                <StatCell
+                  k="Платформа"
+                  v={
+                    <span className="inline-flex items-center gap-1.5">
+                      <PlatformIcon platform={platform === "youtube" ? "youtube" : "instagram"} size={16} />
+                      <span className="sr-only">{platform === "youtube" ? "YouTube" : "Instagram"}</span>
+                    </span>
+                  }
+                />
               </div>
             </div>
 
@@ -222,13 +266,13 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
   );
 });
 
-function StatCell({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+function StatCell({ k, v, mono }: { k: string; v: string | ReactNode; mono?: boolean }) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{k}</p>
-      <p className={`mt-0.5 text-sm text-zinc-900 ${mono ? "font-mono text-xs break-all" : "tabular-nums"}`}>
+      <div className={`mt-0.5 text-sm text-zinc-900 ${mono ? "font-mono text-xs break-all" : "tabular-nums"}`}>
         {v}
-      </p>
+      </div>
     </div>
   );
 }

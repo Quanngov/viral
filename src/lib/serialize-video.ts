@@ -1,4 +1,5 @@
 import type { Video } from "@prisma/client";
+import { videoClientId } from "@/lib/video-client-id";
 import { formatAgeCompactRu, formatRelativeRu, formatViewsCount } from "@/lib/format-video";
 
 function viralLabelFromRating(rating: number): "High Viral" | "Rising" | "Stable" {
@@ -9,13 +10,21 @@ function viralLabelFromRating(rating: number): "High Viral" | "Rising" | "Stable
 
 /** Ответ для карточек и overlay (единый формат). */
 export function videoToClientJson(v: Video) {
+  const id = videoClientId(v.platform, v.externalId);
+  const ratingVal = Math.min(99, Math.max(0, v.rating > 0 ? v.rating : v.score));
   const thumb =
-    v.thumbnailUrl?.trim() || `https://i.ytimg.com/vi/${v.youtubeVideoId}/hqdefault.jpg`;
-  const rating = Math.min(99, Math.max(1, v.score));
+    v.thumbnailUrl?.trim() ||
+    (v.platform === "youtube" ? `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg` : "");
+  const channel = v.channelTitle ?? v.authorDisplayName ?? v.authorUsername ?? "—";
   return {
-    id: v.youtubeVideoId,
+    id,
+    platform: v.platform as "youtube" | "instagram",
+    externalId: v.externalId,
+    youtubeId: v.platform === "youtube" ? v.externalId : null,
     title: v.title,
-    channel: v.channelTitle ?? "—",
+    channel,
+    authorUsername: v.authorUsername,
+    authorAvatarUrl: v.authorAvatarUrl,
     description: v.description ?? "",
     views: formatViewsCount(v.views),
     likes: formatViewsCount(v.likes),
@@ -24,12 +33,14 @@ export function videoToClientJson(v: Video) {
     ageCompact: formatAgeCompactRu(v.publishedAt),
     summary: v.description?.slice(0, 320) ?? "",
     viralScore: Math.round(v.viralScore * 100) / 100,
-    rating,
-    score: rating,
-    viralLabel: viralLabelFromRating(rating),
+    rating: ratingVal,
+    score: ratingVal,
+    viralLabel: viralLabelFromRating(ratingVal),
     thumbnailUrl: thumb,
     url: v.url,
+    videoUrl: v.videoUrl,
     comments: v.comments,
+    shares: v.shares,
     viewsPerHour: Math.round(v.viewsPerHour * 100) / 100,
     engagementRate: Math.round(v.engagementRate * 1e6) / 1e6,
     language: v.language,
@@ -39,10 +50,12 @@ export function videoToClientJson(v: Video) {
 
 /** Компактная запись для левой колонки «тренды». */
 export function videoToTrendingJson(v: Video) {
+  const id = videoClientId(v.platform, v.externalId);
   const thumb =
-    v.thumbnailUrl?.trim() || `https://i.ytimg.com/vi/${v.youtubeVideoId}/hqdefault.jpg`;
+    v.thumbnailUrl?.trim() ||
+    (v.platform === "youtube" ? `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg` : "");
   return {
-    id: v.youtubeVideoId,
+    id,
     title: v.title,
     views: formatViewsCount(v.views),
     thumbnailUrl: thumb,

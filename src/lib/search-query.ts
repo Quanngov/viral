@@ -8,6 +8,8 @@ export type ApiSort =
 
 export type PeriodApi = "today" | "yesterday" | "week" | "month" | "year" | "all";
 
+export type FeedPlatformMode = "all" | "youtube" | "instagram";
+
 const PERIOD_UI_TO_API: Record<string, PeriodApi> = {
   Сегодня: "today",
   Вчера: "yesterday",
@@ -18,7 +20,7 @@ const PERIOD_UI_TO_API: Record<string, PeriodApi> = {
 };
 
 export function uiPeriodToApi(periodLabel: string): PeriodApi {
-  return PERIOD_UI_TO_API[periodLabel] ?? "week";
+  return PERIOD_UI_TO_API[periodLabel] ?? "month";
 }
 
 export function uiLocaleToApi(localeLabel: string): {

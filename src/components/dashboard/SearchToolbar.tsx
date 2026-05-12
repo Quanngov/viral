@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ApiSort } from "@/lib/search-query";
+import type { ApiSort, FeedPlatformMode } from "@/lib/search-query";
 
 type Popover = "locale" | "filter" | "calendar" | "views" | null;
 
@@ -11,6 +11,7 @@ export type SearchSubmitPayload = {
   period: (typeof periods)[number];
   sort: ApiSort;
   minViews: number;
+  platform: FeedPlatformMode;
 };
 
 export type SearchFiltersPayload = Omit<SearchSubmitPayload, "q">;
@@ -106,9 +107,10 @@ export function SearchToolbar({
   const [open, setOpen] = useState<Popover>(null);
   const [query, setQuery] = useState("");
   const [locale, setLocale] = useState<(typeof locales)[number]>(locales[0]);
-  const [period, setPeriod] = useState<(typeof periods)[number]>("Неделя");
+  const [period, setPeriod] = useState<(typeof periods)[number]>("Месяц");
   const [sortSelection, setSortSelection] = useState<ApiSort>("viral_desc");
   const [minViews, setMinViews] = useState<number>(0);
+  const [platform, setPlatform] = useState<FeedPlatformMode>("all");
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -125,8 +127,9 @@ export function SearchToolbar({
       period,
       sort: sortSelection,
       minViews,
+      platform,
     });
-  }, [locale, period, sortSelection, minViews, onFiltersChange]);
+  }, [locale, period, sortSelection, minViews, platform, onFiltersChange]);
 
   function toggle(next: Popover) {
     setOpen((prev) => (prev === next ? null : next));
@@ -141,6 +144,7 @@ export function SearchToolbar({
       period,
       sort: sortSelection,
       minViews,
+      platform,
     });
   }
 
@@ -309,6 +313,31 @@ export function SearchToolbar({
             ) : null}
           </div>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-zinc-500">Площадка</span>
+        {(
+          [
+            { id: "all" as const, label: "Все" },
+            { id: "youtube" as const, label: "YouTube" },
+            { id: "instagram" as const, label: "Instagram" },
+          ] as const
+        ).map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            disabled={searching}
+            onClick={() => setPlatform(opt.id)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+              platform === opt.id
+                ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/20"
+                : "border border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-emerald-300 hover:bg-emerald-50/60"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
     </div>
   );

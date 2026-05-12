@@ -36,7 +36,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          <CompetitorSpySection />
+          <CompetitorSpySection onVideoClick={setSelectedVideo} />
         )}
       </div>
       <VideoDetailPanel video={selectedVideo} onClose={() => setSelectedVideo(null)} />

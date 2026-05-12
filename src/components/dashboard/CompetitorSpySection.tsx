@@ -2,15 +2,27 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import type { GridVideo } from "@/lib/mock-data";
 import {
   type CompetitorAccount,
   type CompetitorVideo,
 } from "@/lib/competitor-mock-data";
 import { detectCompetitorPlatform } from "@/lib/competitor-input";
+import { videoClientId } from "@/lib/video-client-id";
+import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 
 type CompetitorMode = "latest" | "all";
 type SortField = "account" | "views" | "likes" | "comments" | "score";
 type SortDirection = "asc" | "desc";
+type CompetitorVideoRow = CompetitorVideo & {
+  competitor?: {
+    displayName?: string | null;
+    username?: string | null;
+    avatarUrl?: string | null;
+    platform?: string | null;
+    profileUrl?: string | null;
+  };
+};
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("ru-RU").format(value);
@@ -21,6 +33,13 @@ function formatDateShort(value: string): string {
   return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(date);
 }
 
+function formatCompactCount(value: number): string {
+  return new Intl.NumberFormat("ru-RU", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
 function scoreCellStyle(score: number): string {
   if (score >= 90) return "bg-emerald-600 text-white";
   if (score >= 70) return "bg-emerald-100 text-emerald-900";
@@ -28,10 +47,41 @@ function scoreCellStyle(score: number): string {
   return "bg-rose-100 text-rose-900";
 }
 
-function platformBadge(platform: CompetitorAccount["platform"] | CompetitorVideo["platform"]) {
-  if (platform === "youtube") return "YT";
-  if (platform === "tiktok") return "TT";
-  return "IG";
+function toKnownPlatform(platform: string | null | undefined): "youtube" | "instagram" | "tiktok" {
+  if (platform === "youtube" || platform === "tiktok") return platform;
+  return "instagram";
+}
+
+function adaptCompetitorVideoToGridVideo(
+  video: CompetitorVideoRow,
+  account?: CompetitorAccount,
+): GridVideo {
+  const channelLabel = account?.displayName || account?.username || video.competitor?.displayName || "Competitor";
+  const ext = video.externalId ?? video.id;
+  const id =
+    video.platform === "youtube"
+      ? videoClientId("youtube", ext)
+      : `competitor:${video.platform}:${video.id}`;
+  return {
+    id,
+    platform: video.platform === "instagram" ? "instagram" : "youtube",
+    title: video.title ?? video.caption ?? "—",
+    channel: channelLabel,
+    description: video.description ?? video.caption ?? "",
+    views: formatCompactCount(video.views),
+    likes: formatCompactCount(video.likes),
+    publishedAt: formatDateShort(video.publishedAt),
+    publishedAtIso: video.publishedAt,
+    viralScore: video.viralScore ?? 0,
+    rating: video.score,
+    score: video.score,
+    viralLabel: video.score >= 85 ? "High Viral" : video.score >= 65 ? "Rising" : "Stable",
+    thumbnailUrl: video.thumbnailUrl ?? "https://picsum.photos/seed/competitor-fallback/540/720",
+    url: video.url,
+    comments: video.comments,
+    viewsPerHour: video.viewsPerHour ?? 0,
+    engagementRate: video.engagementRate ?? 0,
+  };
 }
 
 function Avatar({ account, size = 64 }: { account: CompetitorAccount; size?: number }) {
@@ -53,9 +103,13 @@ function Avatar({ account, size = 64 }: { account: CompetitorAccount; size?: num
   );
 }
 
-export function CompetitorSpySection() {
+type CompetitorSpySectionProps = {
+  onVideoClick?: (video: GridVideo) => void;
+};
+
+export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps) {
   const [competitors, setCompetitors] = useState<CompetitorAccount[]>([]);
-  const [videos, setVideos] = useState<CompetitorVideo[]>([]);
+  const [videos, setVideos] = useState<CompetitorVideoRow[]>([]);
   const [competitorMode, setCompetitorMode] = useState<CompetitorMode>("latest");
   const [sortField, setSortField] = useState<SortField>("views");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -63,6 +117,8 @@ export function CompetitorSpySection() {
   const [competitorInput, setCompetitorInput] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [visibleCount, setVisibleCount] = useState(8);
+  const [savedVideoIds, setSavedVideoIds] = useState<string[]>([]);
 
   const competitorsById = useMemo(() => {
     const map = new Map<string, CompetitorAccount>();
@@ -73,7 +129,12 @@ export function CompetitorSpySection() {
   const latestVideos = useMemo(() => {
     return [...videos]
       .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      .slice(0, 8);
+      .slice(0, visibleCount);
+  }, [videos, visibleCount]);
+
+  const latestTotalCount = useMemo(() => {
+    return [...videos].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .length;
   }, [videos]);
 
   const allVideos = useMemo(() => {
@@ -115,7 +176,8 @@ export function CompetitorSpySection() {
         const videosData = (await videosRes.json()) as { videos?: CompetitorVideo[] };
         if (cancelled) return;
         setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
-        setVideos(Array.isArray(videosData.videos) ? videosData.videos : []);
+        setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
+        setVisibleCount(8);
       })
       .catch(() => {
         if (cancelled) return;
@@ -170,7 +232,8 @@ export function CompetitorSpySection() {
         const competitorsData = (await competitorsRes.json()) as { competitors?: CompetitorAccount[] };
         const videosData = (await videosRes.json()) as { videos?: CompetitorVideo[] };
         setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
-        setVideos(Array.isArray(videosData.videos) ? videosData.videos : []);
+        setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
+        setVisibleCount(8);
       } catch {
         // keep optimistic UI from previous state
       }
@@ -210,8 +273,8 @@ export function CompetitorSpySection() {
               <span className="block h-16 w-16 overflow-hidden rounded-full border border-zinc-200 bg-white ring-2 ring-emerald-200/70">
                 <Avatar account={competitor} />
               </span>
-              <span className="absolute -bottom-1 left-0 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-zinc-200 bg-white px-1 text-[10px] font-semibold text-zinc-700 shadow-sm">
-                {platformBadge(competitor.platform)}
+              <span className="absolute -bottom-1 left-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-700 shadow-sm">
+                <PlatformIcon platform={toKnownPlatform(competitor.platform)} size={11} />
               </span>
             </span>
             <span className="mt-1.5 block w-16 truncate text-center text-xs font-medium text-zinc-700">
@@ -221,29 +284,36 @@ export function CompetitorSpySection() {
         ))}
       </div>
 
-      <div className="mt-4 flex w-full rounded-2xl bg-white p-1.5 shadow-sm shadow-zinc-900/5 transition-all duration-300 ease-out">
-        <button
-          type="button"
-          onClick={() => setCompetitorMode("latest")}
-          className={`w-1/2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-300 ease-out ${
-            competitorMode === "latest"
-              ? "bg-emerald-600 text-white"
-              : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-          }`}
-        >
-          Последние видео
-        </button>
-        <button
-          type="button"
-          onClick={() => setCompetitorMode("all")}
-          className={`w-1/2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-300 ease-out ${
-            competitorMode === "all"
-              ? "bg-emerald-600 text-white"
-              : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-          }`}
-        >
-          Список всех видео
-        </button>
+      <div className="mt-4 w-full rounded-2xl bg-white p-1.5 shadow-sm shadow-zinc-900/5">
+        <div className="relative grid h-12 grid-cols-2 items-center rounded-xl bg-zinc-50">
+          <span
+            className={`absolute bottom-1 top-1 w-[calc(50%-0.25rem)] rounded-xl bg-emerald-600 shadow-sm transition-all duration-300 ease-out ${
+              competitorMode === "latest" ? "left-1 translate-x-0" : "left-1 translate-x-full"
+            }`}
+            aria-hidden
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setCompetitorMode("latest");
+              setVisibleCount(8);
+            }}
+            className={`relative z-10 h-full rounded-xl px-4 text-sm font-semibold transition-all duration-300 ease-out ${
+              competitorMode === "latest" ? "text-white" : "text-zinc-600"
+            }`}
+          >
+            Последние видео
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompetitorMode("all")}
+            className={`relative z-10 h-full rounded-xl px-4 text-sm font-semibold transition-all duration-300 ease-out ${
+              competitorMode === "all" ? "text-white" : "text-zinc-600"
+            }`}
+          >
+            Список всех видео
+          </button>
+        </div>
       </div>
 
       {competitorMode === "latest" ? (
@@ -263,8 +333,12 @@ export function CompetitorSpySection() {
               {latestVideos.map((video) => {
                 const account = competitorsById.get(video.competitorId);
                 return (
-                  <article key={video.id}>
-                    <div className="relative aspect-[3/4] w-full">
+                  <article
+                    key={video.id}
+                    className="group cursor-pointer"
+                    onClick={() => onVideoClick?.(adaptCompetitorVideoToGridVideo(video, account))}
+                  >
+                    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-white shadow-sm shadow-zinc-900/5">
                       <Image
                         src={video.thumbnailUrl}
                         alt=""
@@ -273,9 +347,10 @@ export function CompetitorSpySection() {
                         className="h-full w-full object-cover"
                       />
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
-                      <span
-                        className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[1.9rem] items-center justify-center rounded-lg border px-1.5 py-0.5 text-sm font-semibold tabular-nums shadow-md ${scoreCellStyle(video.score)}`}
-                      >
+                      <span className="pointer-events-none absolute left-2.5 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/95 shadow-sm">
+                        <PlatformIcon platform={toKnownPlatform(video.platform)} size={13} />
+                      </span>
+                      <span className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[1.9rem] items-center justify-center rounded-lg border px-1.5 py-0.5 text-sm font-semibold tabular-nums shadow-md ${scoreCellStyle(video.score)}`}>
                         {video.score}
                       </span>
                       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 pt-10">
@@ -300,6 +375,17 @@ export function CompetitorSpySection() {
               })}
             </div>
           )}
+          {!loading && latestTotalCount > latestVideos.length ? (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => prev + 8)}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              >
+                Показать еще
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div
@@ -314,10 +400,13 @@ export function CompetitorSpySection() {
                   <th className="w-12 px-3 py-3 text-left font-medium">
                     <span className="sr-only">Платформа</span>
                   </th>
+                  <th className="w-16 px-2 py-3 text-left font-medium">
+                    <span className="sr-only">Превью</span>
+                  </th>
                   {[
                     ["account", "Аккаунт", "text"],
-                    ["views", "eye", "icon"],
                     ["score", "score", "icon"],
+                    ["views", "eye", "icon"],
                     ["likes", "heart", "icon"],
                     ["comments", "comment", "icon"],
                   ].map(([field, label]) => {
@@ -357,14 +446,14 @@ export function CompetitorSpySection() {
                     );
                   })}
                   <th className="px-4 py-3 text-left font-medium">Ссылка</th>
-                  <th className="px-4 py-3 text-left font-medium">Сохранить</th>
                   <th className="px-4 py-3 text-left font-medium">Адаптировать</th>
+                  <th className="px-4 py-3 text-left font-medium">Сохранить</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? null : allVideos.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-zinc-500">
+                    <td colSpan={10} className="px-4 py-12 text-center text-sm text-zinc-500">
                       Пока нет роликов конкурентов. Добавьте YouTube-канал конкурента.
                     </td>
                   </tr>
@@ -373,17 +462,33 @@ export function CompetitorSpySection() {
                   return (
                     <tr key={video.id} className="border-t border-zinc-100 text-zinc-700 hover:bg-zinc-50/80">
                       <td className="px-3 py-3">
-                        <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-zinc-200 bg-white px-1 text-[10px] font-semibold text-zinc-700">
-                          {platformBadge(video.platform)}
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-200 bg-white shadow-sm">
+                          <PlatformIcon platform={toKnownPlatform(video.platform)} size={14} />
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-medium">@{account?.username ?? "unknown"}</td>
-                      <td className="px-4 py-3 tabular-nums">{formatNumber(video.views)}</td>
+                      <td className="px-2 py-3">
+                        <div className="relative h-12 w-9 overflow-hidden rounded-md bg-zinc-100 ring-1 ring-zinc-200">
+                          {video.thumbnailUrl ? (
+                            <Image src={video.thumbnailUrl} alt="" fill sizes="36px" className="object-cover" />
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-7 w-7 overflow-hidden rounded-full border border-zinc-200 bg-zinc-50">
+                            {account ? <Avatar account={account} size={28} /> : null}
+                          </span>
+                          <span className="truncate text-sm font-medium">
+                            @{account?.username ?? account?.displayName ?? "unknown"}
+                          </span>
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex min-w-9 items-center justify-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums ${scoreCellStyle(video.score)}`}>
                           {video.score}
                         </span>
                       </td>
+                      <td className="px-4 py-3 tabular-nums">{formatNumber(video.views)}</td>
                       <td className="px-4 py-3 tabular-nums">{formatNumber(video.likes)}</td>
                       <td className="px-4 py-3 tabular-nums">{formatNumber(video.comments)}</td>
                       <td className="px-4 py-3">
@@ -399,22 +504,31 @@ export function CompetitorSpySection() {
                       <td className="px-4 py-3">
                         <button
                           type="button"
-                          onClick={() => console.log("save", video.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 transition-colors hover:border-emerald-300 hover:text-emerald-800"
-                          aria-label="Сохранить ролик"
+                          onClick={() => console.log("adapt", video.id)}
+                          className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                         >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 4.5h13.5A1.5 1.5 0 0 1 20.25 6v14.25L12 16.5l-8.25 3.75V6a1.5 1.5 0 0 1 1.5-1.5Z" />
-                          </svg>
+                          Адаптировать
                         </button>
                       </td>
                       <td className="px-4 py-3">
                         <button
                           type="button"
-                          onClick={() => console.log("adapt", video.id)}
-                          className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSavedVideoIds((prev) =>
+                              prev.includes(video.id) ? prev.filter((id) => id !== video.id) : [...prev, video.id],
+                            );
+                          }}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                            savedVideoIds.includes(video.id)
+                              ? "border-emerald-600 bg-emerald-600 text-white"
+                              : "border-zinc-200 bg-white text-zinc-600 hover:border-emerald-300 hover:text-emerald-800"
+                          }`}
+                          aria-label="Сохранить ролик"
                         >
-                          Адаптировать
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 4.5h13.5A1.5 1.5 0 0 1 20.25 6v14.25L12 16.5l-8.25 3.75V6a1.5 1.5 0 0 1 1.5-1.5Z" />
+                          </svg>
                         </button>
                       </td>
                     </tr>

@@ -16,11 +16,15 @@ export type WeeklyTrend = {
 
 export type GridVideo = {
   id: string;
+  platform?: "youtube" | "instagram";
+  youtubeId?: string | null;
+  videoUrl?: string | null;
   title: string;
   channel: string;
   description?: string;
   views: string;
   likes: string;
+  shares?: number;
   /** Полное относительное время (панель). */
   publishedAt: string;
   publishedAtIso?: string;

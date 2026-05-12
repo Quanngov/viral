@@ -3,11 +3,12 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
+import { AdminEventsConsole } from "@/components/admin/AdminEventsConsole";
 
 export type AdminVideoRow = {
   id: string;
   platform: string;
-  youtubeVideoId: string;
+  externalId: string;
   url: string;
   title: string;
   description: string | null;
@@ -21,6 +22,7 @@ export type AdminVideoRow = {
   publishedAt: string;
   ageHours: number;
   score: number;
+  rating: number;
   viralScore: number;
   viewsPerHour: number;
   engagementRate: number;
@@ -54,6 +56,7 @@ const SORTABLE = new Set([
   "comments",
   "publishedAt",
   "score",
+  "rating",
   "viralScore",
   "viewsPerHour",
   "engagementRate",
@@ -65,7 +68,7 @@ const SORTABLE = new Set([
 function thumbSrc(v: AdminVideoRow): string {
   const t = v.thumbnailUrl?.trim();
   if (t) return t;
-  return `https://i.ytimg.com/vi/${v.youtubeVideoId}/hqdefault.jpg`;
+  return `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg`;
 }
 
 function formatDt(iso: string | null | undefined) {
@@ -126,6 +129,7 @@ function AdminVideosInner() {
   }, [qInput]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- сброс пагинации при смене фильтров
     setPage(1);
   }, [debouncedQ, platform, niche, sourceQuery, limit]);
 
@@ -245,6 +249,8 @@ function AdminVideosInner() {
           <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{metaError}</p>
         ) : null}
 
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="space-y-6">
         <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex min-w-[220px] flex-1 flex-col gap-1">
@@ -379,8 +385,8 @@ function AdminVideosInner() {
                       </td>
                       <td className="px-2 py-2">{v.language ?? "—"}</td>
                       <td className="px-2 py-2">{v.region ?? "—"}</td>
-                      <td className="max-w-[100px] truncate px-2 py-2 font-mono text-[11px]" title={v.youtubeVideoId}>
-                        {v.youtubeVideoId}
+                      <td className="max-w-[100px] truncate px-2 py-2 font-mono text-[11px]" title={v.externalId}>
+                        {v.externalId}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-[11px]">{formatDt(v.createdAt)}</td>
                       <td className="whitespace-nowrap px-2 py-2 text-[11px]">{formatDt(v.updatedAt)}</td>
@@ -443,6 +449,10 @@ function AdminVideosInner() {
             </div>
           </footer>
         </section>
+          </div>
+
+          <AdminEventsConsole appendKey={appendKey} />
+        </div>
       </main>
 
       {detail ? <DetailModal video={detail} onClose={() => setDetail(null)} /> : null}
@@ -558,7 +568,7 @@ function DetailModal({ video, onClose }: { video: AdminVideoRow; onClose: () => 
           <dl className="mt-4 space-y-2 text-sm">
             <DetailRow k="Платформа" v={video.platform} />
             <DetailRow k="URL" v={video.url} link />
-            <DetailRow k="YouTube ID" v={video.youtubeVideoId} mono />
+            <DetailRow k="External ID" v={video.externalId} mono />
             <DetailRow k="channelId" v={video.channelId ?? "—"} mono />
             <DetailRow k="Канал" v={video.channelTitle ?? "—"} />
             <DetailRow k="Опубликовано" v={formatDt(video.publishedAt)} />
