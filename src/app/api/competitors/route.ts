@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { detectCompetitorPlatform } from "@/lib/competitor-input";
 import { syncInstagramCompetitorReelsFromTikHub } from "@/lib/competitor-instagram-reels-sync";
+import { MAX_COMPETITORS_PER_USER } from "@/lib/competitor-daily-sync-config";
 import { logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { prisma } from "@/lib/prisma";
 import { ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
@@ -50,7 +51,9 @@ async function ytFetch<T>(path: string, params: Record<string, string>, apiKey: 
 }
 
 export async function GET() {
+  const { userId } = await ensureSessionUser();
   const competitors = await prisma.competitorAccount.findMany({
+    where: { userId },
     orderBy: [{ addedAt: "desc" }],
   });
   return NextResponse.json({ competitors });
@@ -84,6 +87,21 @@ export async function POST(req: Request) {
   if (platform === "instagram") {
     const externalId = username.toLowerCase();
     const { userId, sessionKey } = await ensureSessionUser();
+
+    const existingCount = await prisma.competitorAccount.count({ where: { userId } });
+    const alreadyMine = await prisma.competitorAccount.findFirst({
+      where: { userId, platform: "instagram", externalId },
+    });
+    if (!alreadyMine && existingCount >= MAX_COMPETITORS_PER_USER) {
+      return NextResponse.json(
+        {
+          error: "limit_reached",
+          message:
+            "У вас уже добавлено 10 профилей. Чтобы добавить новый, удалите один из старых.",
+        },
+        { status: 409 },
+      );
+    }
 
     await logAdminEvent({
       level: "info",
@@ -158,12 +176,14 @@ export async function POST(req: Request) {
 
     const competitor = await prisma.competitorAccount.upsert({
       where: {
-        platform_externalId: {
+        userId_platform_externalId: {
+          userId,
           platform: "instagram",
           externalId,
         },
       },
       create: {
+        userId,
         platform: "instagram",
         externalId,
         username: externalId,
@@ -289,6 +309,23 @@ export async function POST(req: Request) {
   }
 
   const resolvedChannelId = channel.id;
+  const { userId } = await ensureSessionUser();
+
+  const existingCount = await prisma.competitorAccount.count({ where: { userId } });
+  const alreadyMine = await prisma.competitorAccount.findFirst({
+    where: { userId, platform: "youtube", externalId: resolvedChannelId },
+  });
+  if (!alreadyMine && existingCount >= MAX_COMPETITORS_PER_USER) {
+    return NextResponse.json(
+      {
+        error: "limit_reached",
+        message:
+          "У вас уже добавлено 10 профилей. Чтобы добавить новый, удалите один из старых.",
+      },
+      { status: 409 },
+    );
+  }
+
   const displayName = channel.snippet?.title ?? handle ?? resolvedChannelId;
   const uploadsPlaylistId = channel.contentDetails?.relatedPlaylists?.uploads ?? null;
   console.log("[competitors] resolved channel", {
@@ -305,12 +342,14 @@ export async function POST(req: Request) {
 
   const competitor = await prisma.competitorAccount.upsert({
     where: {
-      platform_externalId: {
+      userId_platform_externalId: {
+        userId,
         platform: "youtube",
         externalId: resolvedChannelId,
       },
     },
     create: {
+      userId,
       platform: "youtube",
       externalId: resolvedChannelId,
       username: handle ?? channel.snippet?.customUrl ?? resolvedChannelId,
@@ -405,6 +444,7 @@ export async function POST(req: Request) {
         (
           await prisma.competitorVideo.findMany({
             where: {
+              competitorId: competitor.id,
               platform: "youtube",
               externalId: { in: shorts.map((s) => s.externalId) },
             },
@@ -417,7 +457,8 @@ export async function POST(req: Request) {
         const existed = existingIds.has(video.externalId);
         await prisma.competitorVideo.upsert({
           where: {
-            platform_externalId: {
+            competitorId_platform_externalId: {
+              competitorId: competitor.id,
               platform: "youtube",
               externalId: video.externalId,
             },

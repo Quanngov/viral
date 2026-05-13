@@ -24,7 +24,15 @@ export type AdminEventType =
   | "tikhub_competitor_fetch_page"
   | "tikhub_competitor_fetch_done"
   | "competitor_videos_saved"
-  | "competitor_add_error";
+  | "competitor_add_error"
+  | "competitor_delete"
+  | "competitor_daily_charge_attempt"
+  | "competitor_daily_charge_success"
+  | "competitor_daily_charge_failed"
+  | "competitor_daily_sync_start"
+  | "competitor_daily_sync_success"
+  | "competitor_daily_sync_failed"
+  | "competitor_daily_sync_skipped";
 
 export type LogAdminEventInput = {
   level: AdminEventLevel;

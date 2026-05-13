@@ -39,7 +39,8 @@ async function upsertCompetitorVideoFromInstagramReel(
 
   await prisma.competitorVideo.upsert({
     where: {
-      platform_externalId: {
+      competitorId_platform_externalId: {
+        competitorId,
         platform: "instagram",
         externalId: reel.externalId,
       },
@@ -250,4 +251,61 @@ export async function syncInstagramCompetitorReelsFromTikHub(opts: {
     warnings,
     reelsFetchFailed,
   };
+}
+
+export type InstagramDailyShallowResult = {
+  ok: boolean;
+  reelsProcessed: number;
+  errorShort?: string;
+};
+
+/** Одна страница TikHub для дневного обновления (без глубокой догрузки). */
+export async function syncInstagramCompetitorReelsDailyOnePage(opts: {
+  competitorId: string;
+  username: string;
+}): Promise<InstagramDailyShallowResult> {
+  const { competitorId, username } = opts;
+  const externalId = username.toLowerCase();
+
+  let page;
+  try {
+    page = await fetchInstagramUserReelsTikHubPageForCompetitor(externalId, null, undefined);
+  } catch (e) {
+    return {
+      ok: false,
+      reelsProcessed: 0,
+      errorShort: e instanceof Error ? e.message.slice(0, 120) : "fetch_error",
+    };
+  }
+
+  if (!page.ok) {
+    const short =
+      page.errorKind === "timeout" || page.httpStatus === 408
+        ? "timeout"
+        : page.errorKind?.slice(0, 80) ?? `http_${page.httpStatus}`;
+    return { ok: false, reelsProcessed: 0, errorShort: short };
+  }
+
+  const bestAvatarUrl = pickBestAvatarFromReels(page.reels);
+  let reelsProcessed = 0;
+  for (const reel of page.reels) {
+    try {
+      await upsertCompetitorVideoFromInstagramReel(competitorId, reel);
+      reelsProcessed++;
+    } catch {
+      // продолжаем остальные ролики
+    }
+  }
+
+  const updateData: { lastSyncedAt: Date; avatarUrl?: string } = {
+    lastSyncedAt: new Date(),
+  };
+  if (bestAvatarUrl) updateData.avatarUrl = bestAvatarUrl;
+
+  await prisma.competitorAccount.update({
+    where: { id: competitorId },
+    data: updateData,
+  });
+
+  return { ok: true, reelsProcessed };
 }

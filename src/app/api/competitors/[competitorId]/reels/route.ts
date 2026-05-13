@@ -18,8 +18,8 @@ export async function POST(_req: Request, ctx: RouteCtx) {
 
   const { userId, sessionKey } = await ensureSessionUser();
 
-  const competitor = await prisma.competitorAccount.findUnique({
-    where: { id: competitorId.trim() },
+  const competitor = await prisma.competitorAccount.findFirst({
+    where: { id: competitorId.trim(), userId },
   });
 
   if (!competitor) {

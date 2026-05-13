@@ -53,6 +53,24 @@ function toKnownPlatform(platform: string | null | undefined): "youtube" | "inst
   return "instagram";
 }
 
+/** Иконка комментариев в духе Instagram (обводка «пузырь»), без внешних зависимостей. */
+function SpyCommentsHeaderIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.65}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.49 8.49 0 0 1 8 8z" />
+    </svg>
+  );
+}
+
 function adaptCompetitorVideoToGridVideo(
   video: CompetitorVideoRow,
   account?: CompetitorAccount,
@@ -134,6 +152,12 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
   const [disabledAllTableIds, setDisabledAllTableIds] = useState<Set<string>>(() => new Set());
   const [accountFilterOpen, setAccountFilterOpen] = useState(false);
   const accountFilterRef = useRef<HTMLDivElement>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<CompetitorAccount | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [dailySyncing, setDailySyncing] = useState(false);
+  const [dailySyncHint, setDailySyncHint] = useState<string | null>(null);
   const { hydrateForVideos } = useSavedVideos();
 
   const competitorsById = useMemo(() => {
@@ -144,11 +168,16 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
 
   useEffect(() => {
     function onDocMouseDown(e: MouseEvent) {
-      if (!accountFilterRef.current?.contains(e.target as Node)) setAccountFilterOpen(false);
+      const t = e.target as Node;
+      if (!accountFilterRef.current?.contains(t)) setAccountFilterOpen(false);
+      if (!settingsRef.current?.contains(t)) {
+        setSettingsOpen(false);
+        setDeleteConfirm(null);
+      }
     }
-    if (accountFilterOpen) document.addEventListener("mousedown", onDocMouseDown);
+    if (accountFilterOpen || settingsOpen) document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [accountFilterOpen]);
+  }, [accountFilterOpen, settingsOpen]);
 
   const latestVideoPool = useMemo(() => {
     return [...videos]
@@ -201,27 +230,64 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      fetch("/api/competitors", { cache: "no-store" }),
-      fetch("/api/competitors/videos", { cache: "no-store" }),
-    ])
-      .then(async ([competitorsRes, videosRes]) => {
+
+    async function loadBase() {
+      try {
+        const [competitorsRes, videosRes] = await Promise.all([
+          fetch("/api/competitors", { cache: "no-store" }),
+          fetch("/api/competitors/videos", { cache: "no-store" }),
+        ]);
         const competitorsData = (await competitorsRes.json()) as { competitors?: CompetitorAccount[] };
         const videosData = (await videosRes.json()) as { videos?: CompetitorVideo[] };
         if (cancelled) return;
         setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
         setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
         setVisibleCount(8);
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) return;
         setCompetitors([]);
         setVideos([]);
-      })
-      .finally(() => {
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void (async () => {
+      await loadBase();
+      if (cancelled) return;
+      setDailySyncing(true);
+      setDailySyncHint(null);
+      try {
+        const res = await fetch("/api/competitors/daily-sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "initial", visibleVideoLimit: 16 }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          syncBlocked?: boolean;
+          reason?: string;
+        };
+        if (data.syncBlocked && data.reason === "not_enough_tokens") {
+          setDailySyncHint(
+            "Недостаточно токенов для дневного обновления профилей. Показаны данные из базы без синхронизации с площадками.",
+          );
+        }
+        const [competitorsRes, videosRes] = await Promise.all([
+          fetch("/api/competitors", { cache: "no-store" }),
+          fetch("/api/competitors/videos", { cache: "no-store" }),
+        ]);
+        const competitorsData = (await competitorsRes.json()) as { competitors?: CompetitorAccount[] };
+        const videosData = (await videosRes.json()) as { videos?: CompetitorVideo[] };
         if (cancelled) return;
-        setLoading(false);
-      });
+        setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
+        setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
+      } catch {
+        // оставляем данные первого запроса
+      } finally {
+        if (!cancelled) setDailySyncing(false);
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
@@ -264,6 +330,13 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
         setFormError(data.message ?? "Сервис временно недоступен.");
         return;
       }
+      if (res.status === 409 && data.error === "limit_reached") {
+        setFormError(
+          data.message ??
+            "У вас уже добавлено 10 профилей. Чтобы добавить новый, удалите один из старых.",
+        );
+        return;
+      }
       if (!res.ok) {
         if (data.error === "already_exists") {
           setFormError("Этот аккаунт уже добавлен.");
@@ -298,9 +371,57 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
     }
   }
 
+  async function deleteCompetitor(account: CompetitorAccount) {
+    setDeleteSubmitting(true);
+    setAddNotice(null);
+    try {
+      const res = await fetch(`/api/competitors/${encodeURIComponent(account.id)}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+      if (!res.ok) {
+        setAddNotice({
+          text: data.message ?? "Не удалось удалить профиль.",
+          tone: "warn",
+        });
+        return;
+      }
+      setCompetitors((prev) => prev.filter((c) => c.id !== account.id));
+      setVideos((prev) => prev.filter((v) => v.competitorId !== account.id));
+      setDisabledLatestIds((prev) => {
+        const next = new Set(prev);
+        next.delete(account.id);
+        return next;
+      });
+      setDisabledAllTableIds((prev) => {
+        const next = new Set(prev);
+        next.delete(account.id);
+        return next;
+      });
+      setDeleteConfirm(null);
+      setSettingsOpen(false);
+      setAddNotice({ text: "Профиль удалён.", tone: "ok" });
+    } catch {
+      setAddNotice({ text: "Не удалось удалить профиль.", tone: "warn" });
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }
+
   return (
     <section className="px-6 pt-5">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Шпион конкурентов</h1>
+
+      {dailySyncing ? (
+        <p className="mt-2 text-xs text-zinc-500" role="status">
+          Обновляем данные…
+        </p>
+      ) : null}
+      {dailySyncHint && !dailySyncing ? (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950" role="status">
+          {dailySyncHint}
+        </div>
+      ) : null}
 
       {addNotice ? (
         <div
@@ -315,7 +436,8 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
         </div>
       ) : null}
 
-      <div className="scrollbar-hide mt-4 flex items-start gap-3 overflow-x-auto overflow-y-visible pb-3 pt-2">
+      <div className="mt-4 flex items-start gap-2">
+        <div className="scrollbar-hide flex min-w-0 flex-1 items-start gap-3 overflow-x-auto overflow-y-visible pb-3 pt-2">
         <button
           type="button"
           onClick={() => {
@@ -380,6 +502,99 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
             </div>
           );
         })}
+        </div>
+        <div ref={settingsRef} className="relative shrink-0 self-start pb-3 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSettingsOpen((o) => !o);
+              setDeleteConfirm(null);
+            }}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
+            aria-expanded={settingsOpen}
+            aria-haspopup="true"
+            aria-label="Настройки профилей конкурентов"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} aria-hidden>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.292.24-.437.613-.43.992a7.723 7.723 0 0 1 0 .255c-.007.378.138.75.43.99l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.379-.138-.75-.43-.99l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281Z"
+              />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+          </button>
+          {settingsOpen ? (
+            <div
+              className="absolute right-0 top-full z-40 mt-1 w-[min(100vw-3rem,20rem)] rounded-2xl border border-zinc-200 bg-white py-2 shadow-lg shadow-zinc-900/10"
+              role="dialog"
+              aria-label="Профили конкурентов"
+            >
+              {competitors.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-zinc-500">Пока нет добавленных профилей.</p>
+              ) : deleteConfirm ? (
+                <div className="px-4 py-3">
+                  <p className="text-sm leading-relaxed text-zinc-800">
+                    Удалить профиль? Токены за добавление не вернутся. Все связанные ролики этого профиля будут
+                    удалены/скрыты.
+                  </p>
+                  <p className="mt-2 truncate text-xs font-medium text-zinc-600">
+                    @{deleteConfirm.username ?? deleteConfirm.displayName ?? "—"}
+                  </p>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={deleteSubmitting}
+                      onClick={() => setDeleteConfirm(null)}
+                      className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleteSubmitting}
+                      onClick={() => void deleteCompetitor(deleteConfirm)}
+                      className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                    >
+                      {deleteSubmitting ? "Удаление…" : "Удалить"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <ul className="max-h-72 overflow-y-auto px-1">
+                  {competitors.map((c) => (
+                    <li
+                      key={c.id}
+                      className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-zinc-50"
+                    >
+                      <span className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-zinc-200 bg-zinc-50">
+                        <Avatar account={c} size={36} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-zinc-900">
+                          @{c.username ?? c.displayName ?? "—"}
+                        </p>
+                        {c.displayName && c.username && c.displayName !== c.username ? (
+                          <p className="truncate text-xs text-zinc-500">{c.displayName}</p>
+                        ) : null}
+                      </div>
+                      <span className="shrink-0 drop-shadow-[0_1px_1px_rgba(0,0,0,0.12)]">
+                        <PlatformIcon platform={toKnownPlatform(c.platform)} size={18} />
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirm(c)}
+                        className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-800 hover:bg-rose-100"
+                      >
+                        Удалить
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-4 w-full rounded-2xl bg-white p-1.5 shadow-sm shadow-zinc-900/5">
@@ -447,8 +662,8 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                         className="h-full w-full object-cover object-center"
                       />
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
-                      <span className="pointer-events-none absolute left-2.5 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/95 shadow-sm">
-                        <PlatformIcon platform={toKnownPlatform(video.platform)} size={13} />
+                      <span className="pointer-events-none absolute left-2.5 top-2.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
+                        <PlatformIcon platform={toKnownPlatform(video.platform)} size={21} />
                       </span>
                       <span className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[1.9rem] items-center justify-center rounded-lg border px-1.5 py-0.5 text-sm font-semibold tabular-nums shadow-md ${scoreCellStyle(video.score)}`}>
                         {video.score}
@@ -479,7 +694,30 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
             <div className="mt-4 flex justify-center">
               <button
                 type="button"
-                onClick={() => setVisibleCount((prev) => prev + 8)}
+                onClick={() => {
+                  const next = visibleCount + 8;
+                  setVisibleCount(next);
+                  void (async () => {
+                    setDailySyncing(true);
+                    try {
+                      await fetch("/api/competitors/daily-sync", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "more", visibleVideoLimit: next }),
+                      });
+                      const [competitorsRes, videosRes] = await Promise.all([
+                        fetch("/api/competitors", { cache: "no-store" }),
+                        fetch("/api/competitors/videos", { cache: "no-store" }),
+                      ]);
+                      const competitorsData = (await competitorsRes.json()) as { competitors?: CompetitorAccount[] };
+                      const videosData = (await videosRes.json()) as { videos?: CompetitorVideo[] };
+                      setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
+                      setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
+                    } finally {
+                      setDailySyncing(false);
+                    }
+                  })();
+                }}
                 className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
               >
                 Показать еще
@@ -516,16 +754,6 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                         <svg className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden>
                           <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                         </svg>
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-0.5 rounded-md px-0.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-                        onClick={() => onSort("account")}
-                        aria-label="Сортировать по аккаунту"
-                      >
-                        <span className={`text-[10px] ${sortField === "account" ? "text-emerald-600" : "text-zinc-400"}`}>
-                          {sortField === "account" ? (sortDirection === "asc" ? "▲" : "▼") : "↕"}
-                        </span>
                       </button>
                       {accountFilterOpen ? (
                         <div
@@ -565,12 +793,25 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                       ) : null}
                     </div>
                   </th>
+                  <th className="px-2 py-3 text-left font-medium">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 text-zinc-600 hover:text-zinc-900"
+                      onClick={() => onSort("score")}
+                    >
+                      <span className="rounded-md border border-zinc-300/80 bg-zinc-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-600">
+                        ОЦЕНКА
+                      </span>
+                      <span className={`text-[10px] ${sortField === "score" ? "text-emerald-600" : "text-zinc-400"}`}>
+                        {sortField === "score" ? (sortDirection === "asc" ? "▲" : "▼") : "↕"}
+                      </span>
+                    </button>
+                  </th>
                   {(
                     [
-                      ["score", "score", "icon"],
-                      ["views", "eye", "icon"],
-                      ["likes", "heart", "icon"],
-                      ["comments", "comment", "icon"],
+                      ["views", "eye"],
+                      ["likes", "heart"],
+                      ["comments", "message"],
                     ] as const
                   ).map(([field, label]) => {
                     const active = sortField === field;
@@ -590,16 +831,8 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" aria-hidden>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.07-4.5-4.625-4.5-1.847 0-3.44 1.059-4.125 2.592-.685-1.533-2.278-2.592-4.125-2.592C5.57 3.75 3.5 5.765 3.5 8.25c0 7.22 8.75 11.25 8.75 11.25S21 15.47 21 8.25Z" />
                             </svg>
-                          ) : label === "comment" ? (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" aria-hidden>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3h6m-9.75 8.25h12A2.25 2.25 0 0 0 18 17.25V6.75A2.25 2.25 0 0 0 15.75 4.5h-12A2.25 2.25 0 0 0 1.5 6.75v10.5A2.25 2.25 0 0 0 3.75 19.5Z" />
-                            </svg>
-                          ) : label === "score" ? (
-                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-                              <path d="M12 3.5 14.5 8.6l5.6.8-4 3.9.9 5.6-5-2.7-5 2.7.9-5.6-4-3.9 5.6-.8L12 3.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
                           ) : (
-                            <span>{label}</span>
+                            <SpyCommentsHeaderIcon className="h-4 w-4" />
                           )}
                           <span className={`text-[10px] ${active ? "text-emerald-600" : "text-zinc-400"}`}>
                             {active ? (sortDirection === "asc" ? "▲" : "▼") : "↕"}
@@ -609,7 +842,9 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                     );
                   })}
                   <th className="px-4 py-3 text-left font-medium">Ссылка</th>
-                  <th className="px-4 py-3 text-left font-medium">Адаптировать</th>
+                  <th className="w-px px-2 py-3">
+                    <span className="sr-only">Открыть карточку ролика</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -631,8 +866,8 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                   return (
                     <tr key={video.id} className="border-t border-zinc-100 text-zinc-700 hover:bg-zinc-50/80">
                       <td className="px-3 py-3">
-                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-200 bg-white shadow-sm">
-                          <PlatformIcon platform={toKnownPlatform(video.platform)} size={14} />
+                        <span className="inline-flex drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)]">
+                          <PlatformIcon platform={toKnownPlatform(video.platform)} size={17} />
                         </span>
                       </td>
                       <td className="px-2 py-3">
@@ -658,31 +893,38 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex min-w-9 items-center justify-center rounded-md px-2 py-1 text-xs font-semibold tabular-nums ${scoreCellStyle(video.score)}`}>
+                      <td className="px-2 py-2">
+                        <span className={`inline-flex min-w-8 items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ${scoreCellStyle(video.score)}`}>
                           {video.score}
                         </span>
                       </td>
                       <td className="px-4 py-3 tabular-nums">{formatNumber(video.views)}</td>
                       <td className="px-4 py-3 tabular-nums">{formatNumber(video.likes)}</td>
                       <td className="px-4 py-3 tabular-nums">{formatNumber(video.comments)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-3">
                         <a
                           href={video.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-emerald-700 transition-colors hover:text-emerald-900"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-emerald-700"
+                          aria-label="Открыть ролик в новой вкладке"
                         >
-                          Открыть
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" aria-hidden>
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m4.95-4.95 1.757-1.757a4.5 4.5 0 0 1 6.364 6.364l-4.5 4.5a4.5 4.5 0 0 1-1.242 7.244"
+                            />
+                          </svg>
                         </a>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-3 text-right">
                         <button
                           type="button"
                           onClick={() => onVideoClick?.(adaptCompetitorVideoToGridVideo(video, account))}
                           className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                         >
-                          Адаптировать
+                          Открыть
                         </button>
                       </td>
                     </tr>

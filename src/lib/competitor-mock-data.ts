@@ -1,5 +1,6 @@
 export type CompetitorAccount = {
   id: string;
+  userId?: string;
   platform: "youtube" | "instagram" | "tiktok";
   username: string;
   profileUrl: string;

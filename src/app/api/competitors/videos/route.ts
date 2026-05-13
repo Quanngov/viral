@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { ensureSessionUser } from "@/lib/token-wallet";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  const { userId } = await ensureSessionUser();
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("mode") === "all" ? "all" : "latest";
   const limitRaw = Number(searchParams.get("limit") ?? (mode === "latest" ? "20" : "100"));
@@ -22,6 +24,7 @@ export async function GET(req: Request) {
           : [{ publishedAt: "desc" }];
 
   const rows = await prisma.competitorVideo.findMany({
+    where: { competitor: { userId } },
     include: {
       competitor: {
         select: {

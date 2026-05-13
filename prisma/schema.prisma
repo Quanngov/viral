@@ -75,6 +75,8 @@ model SearchCache {
 
 model CompetitorAccount {
   id                String            @id @default(cuid())
+  userId            String
+  user              SessionUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform          String
   externalId        String
   username          String?
@@ -91,9 +93,29 @@ model CompetitorAccount {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  videos CompetitorVideo[]
+  videos     CompetitorVideo[]
+  dailySyncs CompetitorDailySync[]
 
-  @@unique([platform, externalId])
+  @@unique([userId, platform, externalId])
+  @@index([userId])
+}
+
+model CompetitorDailySync {
+  id             String            @id @default(cuid())
+  userId         String
+  user           SessionUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competitorId   String
+  competitor     CompetitorAccount @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  /** UTC YYYY-MM-DD */
+  syncDate       String
+  chargedTokens  Int
+  chargedAt      DateTime
+  syncedAt       DateTime?
+  status         String
+  error          String?
+
+  @@unique([userId, competitorId, syncDate])
+  @@index([userId, syncDate])
 }
 
 model CompetitorVideo {
@@ -120,7 +142,7 @@ model CompetitorVideo {
   updatedAt       DateTime @updatedAt
   lastFetchedAt   DateTime?
 
-  @@unique([platform, externalId])
+  @@unique([competitorId, platform, externalId])
 }
 
 /** Анонимный пользователь по httpOnly session id (не хранить баланс в cookie). */
@@ -130,9 +152,11 @@ model SessionUser {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  userTokenBalance  UserTokenBalance?
-  tokenTransactions TokenTransaction[]
-  savedVideos       SavedVideo[]
+  userTokenBalance     UserTokenBalance?
+  tokenTransactions    TokenTransaction[]
+  savedVideos          SavedVideo[]
+  competitorAccounts   CompetitorAccount[]
+  competitorDailySyncs CompetitorDailySync[]
 }
 
 model SavedVideo {
