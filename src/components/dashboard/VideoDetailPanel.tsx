@@ -7,10 +7,13 @@ import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { SaveBookmarkButton } from "@/components/dashboard/SaveBookmarkButton";
 import { VideoDetailTranscript } from "@/components/dashboard/VideoDetailTranscript";
 import { MockScriptGeneratorModal, MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
-import { formatViewsCount } from "@/lib/format-video";
+import { formatMetricCount } from "@/lib/format-metrics";
+import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
+import type { DashboardView } from "@/components/dashboard/UserPanel";
 
 type VideoDetailPanelProps = {
   video: GridVideo | null;
+  activeView?: DashboardView;
   onClose: () => void;
 };
 
@@ -24,12 +27,18 @@ function resolvePlatform(video: GridVideo): "youtube" | "instagram" | "tiktok" {
   return "youtube";
 }
 
-export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose }: VideoDetailPanelProps) {
+export const VideoDetailPanel = memo(function VideoDetailPanel({ video, activeView, onClose }: VideoDetailPanelProps) {
+  const { isSaved } = useSavedVideos();
   const [playInModal, setPlayInModal] = useState(false);
   const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
   const [scriptModalOpen, setScriptModalOpen] = useState(false);
   const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
   const [contentPlanModalOpen, setContentPlanModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!video || activeView !== "saved") return;
+    if (!isSaved(video.id)) onClose();
+  }, [video, activeView, isSaved, onClose]);
 
   useEffect(() => {
     if (!video) return;
@@ -67,7 +76,7 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
     (video.thumbnailUrl?.includes("fbcdn.net") ?? false);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 md:p-6">
       <button
         type="button"
         aria-label="Закрыть"
@@ -177,10 +186,13 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
               <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
                 <StatCell k="Просмотры" v={video.views} />
                 <StatCell k="Лайки" v={video.likes} />
-                <StatCell k="Комментарии" v={String(video.comments ?? "—")} />
+                <StatCell
+                  k="Комментарии"
+                  v={typeof video.comments === "number" ? formatMetricCount(video.comments) : "—"}
+                />
                 <StatCell
                   k="Репосты"
-                  v={typeof video.shares === "number" ? formatViewsCount(video.shares) : "—"}
+                  v={typeof video.shares === "number" ? formatMetricCount(video.shares) : "—"}
                 />
                 <StatCell k="Дата публикации" v={video.publishedAt} />
                 <StatCell

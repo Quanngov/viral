@@ -10,7 +10,10 @@ import {
 import { detectCompetitorPlatform } from "@/lib/competitor-input";
 import { videoClientId } from "@/lib/video-client-id";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { useToast } from "@/components/dashboard/ToastContext";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
+import { formatMetricCount } from "@/lib/format-metrics";
+import { USER_MSG } from "@/lib/api-user-messages";
 
 type CompetitorMode = "latest" | "all";
 type SortField = "account" | "views" | "likes" | "comments" | "score";
@@ -25,20 +28,9 @@ type CompetitorVideoRow = CompetitorVideo & {
   };
 };
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("ru-RU").format(value);
-}
-
 function formatDateShort(value: string): string {
   const date = new Date(value);
   return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(date);
-}
-
-function formatCompactCount(value: number): string {
-  return new Intl.NumberFormat("ru-RU", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
 }
 
 function scoreCellStyle(score: number): string {
@@ -93,8 +85,8 @@ function adaptCompetitorVideoToGridVideo(
     authorUsername: account?.username ?? video.competitor?.username ?? null,
     authorAvatarUrl: account?.avatarUrl ?? video.competitor?.avatarUrl ?? null,
     description: video.description ?? video.caption ?? "",
-    views: formatCompactCount(video.views),
-    likes: formatCompactCount(video.likes),
+    views: formatMetricCount(video.views),
+    likes: formatMetricCount(video.likes),
     publishedAt: formatDateShort(video.publishedAt),
     publishedAtIso: video.publishedAt,
     viralScore: video.viralScore ?? 0,
@@ -138,6 +130,7 @@ type CompetitorSpySectionProps = {
 };
 
 export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps) {
+  const { showToast } = useToast();
   const [competitors, setCompetitors] = useState<CompetitorAccount[]>([]);
   const [videos, setVideos] = useState<CompetitorVideoRow[]>([]);
   const [competitorMode, setCompetitorMode] = useState<CompetitorMode>("latest");
@@ -270,9 +263,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
           reason?: string;
         };
         if (data.syncBlocked && data.reason === "not_enough_tokens") {
-          setDailySyncHint(
-            "Недостаточно токенов для дневного обновления профилей. Показаны данные из базы без синхронизации с площадками.",
-          );
+          setDailySyncHint(USER_MSG.tokensInsufficient);
         }
         const [competitorsRes, videosRes] = await Promise.all([
           fetch("/api/competitors", { cache: "no-store" }),
@@ -322,10 +313,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
         tokensRemaining?: number;
       };
       if (res.status === 402) {
-        setFormError(
-          data.message ??
-            "Недостаточно внутренних токенов для добавления аккаунта. Пополните баланс и попробуйте снова.",
-        );
+        setFormError(data.message ?? USER_MSG.tokensInsufficient);
         return;
       }
       if (res.status === 503) {
@@ -402,7 +390,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
       });
       setDeleteConfirm(null);
       setSettingsOpen(false);
-      setAddNotice({ text: "Профиль удалён.", tone: "ok" });
+      showToast("Профиль удален", "ok");
     } catch {
       setAddNotice({ text: "Не удалось удалить профиль.", tone: "warn" });
     } finally {
@@ -533,7 +521,12 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
               aria-label="Профили конкурентов"
             >
               {competitors.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-zinc-500">Пока нет добавленных профилей.</p>
+                <>
+                  <p className="px-4 py-3 text-sm font-semibold text-zinc-800">Добавьте первый профиль конкурента</p>
+                  <p className="px-4 pb-3 text-xs leading-relaxed text-zinc-600">
+                    Сервис будет собирать ролики, просмотры, оценки и свежие идеи по выбранным аккаунтам.
+                  </p>
+                </>
               ) : deleteConfirm ? (
                 <div className="px-4 py-3">
                   <p className="text-sm leading-relaxed text-zinc-800">
@@ -637,13 +630,36 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
             competitorMode === "latest" ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
           }`}
         >
-          {loading ? null : latestVideos.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-6 py-14 text-center text-sm text-zinc-500 shadow-sm">
-              {competitors.length === 0
-                ? "Добавьте конкурентов, чтобы увидеть их последние ролики."
-                : videos.length === 0
-                  ? "Пока нет роликов конкурентов. Для Instagram загрузка появится после подключения TikHub."
-                  : "Все профили отключены для вкладки «Последние видео». Включите хотя бы один кружок выше."}
+          {loading ? (
+            <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="aspect-[3/4] w-full animate-pulse rounded-3xl bg-zinc-200/90 shadow-sm ring-1 ring-zinc-900/5"
+                />
+              ))}
+            </div>
+          ) : latestVideos.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-zinc-200 bg-white px-6 py-14 text-center text-sm shadow-sm">
+              {competitors.length === 0 ? (
+                <>
+                  <p className="font-semibold text-zinc-800">Добавьте первый профиль конкурента</p>
+                  <p className="mt-2 text-zinc-600">
+                    Сервис будет собирать ролики, просмотры, оценки и свежие идеи по выбранным аккаунтам.
+                  </p>
+                </>
+              ) : videos.length === 0 ? (
+                <>
+                  <p className="font-semibold text-zinc-800">Видео пока не загружены</p>
+                  <p className="mt-2 text-zinc-600">
+                    Попробуйте нажать «Показать еще» или добавьте другой профиль.
+                  </p>
+                </>
+              ) : (
+                <p className="text-zinc-600">
+                  Все профили отключены для вкладки «Последние видео». Включите хотя бы один кружок выше.
+                </p>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -672,7 +688,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                       </span>
                       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 pt-10">
                         <span className="text-xs font-semibold tabular-nums text-white drop-shadow-sm">
-                          {formatNumber(video.views)}
+                          {formatMetricCount(video.views)}
                         </span>
                         <span className="shrink-0 text-xs font-semibold text-white/95 drop-shadow-sm">
                           {formatDateShort(video.publishedAt)}
@@ -720,7 +736,8 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                     }
                   })();
                 }}
-                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-50"
+                disabled={dailySyncing}
               >
                 Показать еще
               </button>
@@ -900,9 +917,9 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
                           {video.score}
                         </span>
                       </td>
-                      <td className="px-4 py-3 tabular-nums">{formatNumber(video.views)}</td>
-                      <td className="px-4 py-3 tabular-nums">{formatNumber(video.likes)}</td>
-                      <td className="px-4 py-3 tabular-nums">{formatNumber(video.comments)}</td>
+                      <td className="px-4 py-3 tabular-nums">{formatMetricCount(video.views)}</td>
+                      <td className="px-4 py-3 tabular-nums">{formatMetricCount(video.likes)}</td>
+                      <td className="px-4 py-3 tabular-nums">{formatMetricCount(video.comments)}</td>
                       <td className="px-2 py-3">
                         <a
                           href={video.url}

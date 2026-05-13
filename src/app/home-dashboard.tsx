@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { CompetitorSpySection } from "@/components/dashboard/CompetitorSpySection";
 import { LiveTrendsSidebar } from "@/components/dashboard/LiveTrendsSidebar";
 import { SavedVideosProvider } from "@/components/dashboard/SavedVideosContext";
+import { ToastProvider } from "@/components/dashboard/ToastContext";
 import { SavedVideosSection } from "@/components/dashboard/SavedVideosSection";
 import { SearchResultsSection } from "@/components/dashboard/SearchResultsSection";
 import { VideoDetailPanel } from "@/components/dashboard/VideoDetailPanel";
@@ -64,8 +65,9 @@ function HomeDashboardInner() {
   }, [router, searchParams]);
 
   return (
-    <SavedVideosProvider>
-      <DashboardLayout>
+    <ToastProvider>
+      <SavedVideosProvider>
+        <DashboardLayout>
         <div className="sticky top-0 flex h-[100dvh] min-h-0 w-[25%] min-w-[272px] max-w-[380px] shrink-0 flex-col overflow-hidden bg-transparent">
           <LiveTrendsSidebar onVideoClick={setSelectedVideo} />
           <UserPanel user={mockUser} activeView={activeView} onChangeView={setActiveView} />
@@ -99,9 +101,14 @@ function HomeDashboardInner() {
             </div>
           )}
         </div>
-        <VideoDetailPanel video={selectedVideo} onClose={() => setSelectedVideo(null)} />
+        <VideoDetailPanel
+          video={selectedVideo}
+          activeView={activeView}
+          onClose={() => setSelectedVideo(null)}
+        />
       </DashboardLayout>
-    </SavedVideosProvider>
+      </SavedVideosProvider>
+    </ToastProvider>
   );
 }
 

@@ -12,8 +12,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-const OVERLAY_Z = 200;
-const ANCHOR_BACKDROP_Z = 199;
+const OVERLAY_Z = 220;
+const ANCHOR_BACKDROP_Z = 219;
 
 const emptySubscribe = () => () => {};
 

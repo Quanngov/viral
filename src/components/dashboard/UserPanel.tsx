@@ -11,6 +11,7 @@ import {
   MockSimpleInfoModal,
   MockTokenPlansModal,
 } from "@/components/dashboard/mock-dashboard-panels";
+import { formatTokensRuSpace } from "@/lib/format-metrics";
 
 export type DashboardView = "home" | "competitors" | "saved" | "scripts";
 
@@ -101,7 +102,7 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold tracking-tight text-emerald-900">{user.plan}</span>
               <span className="flex items-center gap-1 text-lg font-bold tabular-nums tracking-tight text-emerald-900">
-                {user.tokens.toLocaleString("ru-RU")}
+                {formatTokensRuSpace(user.tokens)}
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
                   <path
                     d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"

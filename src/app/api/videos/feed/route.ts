@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import type { Video } from "@prisma/client";
 import { logAdminEvent, safeMeta } from "@/lib/admin-events";
+import { USER_MSG } from "@/lib/api-user-messages";
 import { prisma } from "@/lib/prisma";
 import { buildFeedVideoPrismaWhere } from "@/lib/feed/build-feed-video-where";
 import { videoMatchesFeedFilters, type FeedFilterPayload } from "@/lib/feed/feed-filters";
@@ -104,6 +105,7 @@ async function loadAndPick(args: {
 
 export async function POST(req: Request) {
   let body: Body = {};
+  let feedUserHint: string | undefined;
   try {
     body = (await req.json()) as Body;
   } catch {
@@ -177,7 +179,7 @@ export async function POST(req: Request) {
           tokensRemaining: spend.balance,
           videos: [],
           noMore: true,
-          message: "Недостаточно внутренних токенов",
+          message: USER_MSG.tokensInsufficient,
         },
         { status: 402 },
       );
@@ -271,6 +273,9 @@ export async function POST(req: Request) {
                 error: e instanceof Error ? { name: e.name, message: e.message } : String(e),
               }),
             });
+            if (e instanceof Error && e.name === "AbortError") {
+              feedUserHint = USER_MSG.tikhubTimeout;
+            }
             return { saved: 0, reelsFound: 0 };
           }
         })()
@@ -351,5 +356,6 @@ export async function POST(req: Request) {
     videos: picked.map(videoToClientJson),
     noMore,
     totalCount,
+    userHint: feedUserHint,
   });
 }

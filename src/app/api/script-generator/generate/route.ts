@@ -4,11 +4,33 @@ import { logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { deepseekChatCompletion, DeepSeekError } from "@/lib/deepseek-generate";
 import { creditTokens, ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
 import { getDeepSeekEnv, getScriptGenerationTokenCost } from "@/lib/script-generator-config";
+import { USER_MSG } from "@/lib/api-user-messages";
 import { buildDeepSeekMessages, buildReferencesPromptBlock, SCRIPT_PROMPT_REF_ONLY } from "@/lib/script-generator-prompt";
 
 export const dynamic = "force-dynamic";
 
 const MAX_PROMPT = 8000;
+
+function nextScriptChatTitle(
+  promptTrim: string,
+  ref: { title: string; authorUsername: string | null } | undefined,
+): string {
+  const p = promptTrim.replace(/\s+/g, " ").trim();
+  if (p) {
+    const short = p.length > 48 ? `${p.slice(0, 46)}…` : p;
+    return `Сценарий: ${short}`;
+  }
+  const u = ref?.authorUsername?.trim();
+  if (u) {
+    const handle = u.startsWith("@") ? u : `@${u}`;
+    return `Сценарий по ${handle}`;
+  }
+  const t = ref?.title?.trim();
+  if (t) {
+    return `Сценарий: ${t.length > 40 ? `${t.slice(0, 38)}…` : t}`;
+  }
+  return "Новый чат";
+}
 
 export async function POST(req: Request) {
   const { userId, sessionKey } = await ensureSessionUser();
@@ -97,7 +119,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: "missing_deepseek",
-        message: "Генерация недоступна: на сервере не задан DEEPSEEK_API_KEY.",
+        message: USER_MSG.deepseekKeyMissing,
       },
       { status: 503 },
     );
@@ -114,7 +136,7 @@ export async function POST(req: Request) {
       meta: safeMeta({ chatId, errorKind: "insufficient_tokens", cost, balance: spend.balance }),
     });
     return NextResponse.json(
-      { error: "insufficient_tokens", message: "Недостаточно токенов для генерации.", balance: spend.balance },
+      { error: "insufficient_tokens", message: USER_MSG.tokensInsufficient, balance: spend.balance },
       { status: 402 },
     );
   }
@@ -175,7 +197,7 @@ export async function POST(req: Request) {
     });
     const msg =
       kind === "missing_api_key"
-        ? "Нет ключа API."
+        ? USER_MSG.deepseekKeyMissing
         : kind === "http"
           ? "Сервис модели вернул ошибку. Попробуйте позже."
           : kind === "abort"
@@ -210,11 +232,7 @@ export async function POST(req: Request) {
     });
     const nextTitle =
       assistantBefore === 0 && (chat.title === "Новый чат" || chat.title.trim() === "Новый чат")
-        ? promptTrim
-          ? `${promptTrim.slice(0, 40)}${promptTrim.length > 40 ? "…" : ""}`
-          : refRows[0]?.title
-            ? `Сценарий: ${refRows[0].title.slice(0, 36)}${refRows[0].title.length > 36 ? "…" : ""}`
-            : "Новый чат"
+        ? nextScriptChatTitle(promptTrim, refRows[0])
         : chat.title;
     await prisma.scriptChat.update({
       where: { id: chatId },
@@ -281,11 +299,7 @@ export async function POST(req: Request) {
     },
     chatTitle:
       assistantBefore === 0 && (chat.title === "Новый чат" || chat.title.trim() === "Новый чат")
-        ? promptTrim
-          ? `${promptTrim.slice(0, 40)}${promptTrim.length > 40 ? "…" : ""}`
-          : refRows[0]?.title
-            ? `Сценарий: ${refRows[0].title.slice(0, 36)}${refRows[0].title.length > 36 ? "…" : ""}`
-            : "Новый чат"
+        ? nextScriptChatTitle(promptTrim, refRows[0])
         : chat.title,
     balance,
   });

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GridVideo } from "@/lib/mock-data";
 import { transcribePostBodyFromGridVideo, transcribeSearchParamsFromGridVideo } from "@/components/dashboard/video-transcribe-client";
+import { useToast } from "@/components/dashboard/ToastContext";
+import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
 
 /** Совпадает с текстом в `api/videos/transcribe` для YouTube без субтитров. */
 const YT_TRANSCRIBE_UNAVAILABLE_HINT = "Для YouTube-ролика пока нет распознавания без субтитров.";
@@ -44,6 +46,7 @@ function TokenSpark({ className }: { className?: string }) {
 
 export function VideoDetailTranscript({ video, onClose }: { video: GridVideo; onClose: () => void }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [hydrating, setHydrating] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [transcriptStatus, setTranscriptStatus] = useState<string | null>(null);
@@ -111,12 +114,19 @@ export function VideoDetailTranscript({ video, onClose }: { video: GridVideo; on
         return;
       }
       if (!res.ok) {
+        if (res.status === 402) {
+          showToast(messageForHttpStatus(402, data.message), "warn");
+        }
         setPanelError(
-          typeof data.message === "string"
-            ? data.message
-            : data.error === "insufficient_tokens"
-              ? "Недостаточно токенов"
-              : "Ошибка транскрибации",
+          res.status === 402
+            ? messageForHttpStatus(402, data.message)
+            : sanitizeClientErrorMessage(
+                typeof data.message === "string"
+                  ? data.message
+                  : data.error === "insufficient_tokens"
+                    ? messageForHttpStatus(402)
+                    : "",
+              ) || "Ошибка транскрибации",
         );
         if (res.status === 422) {
           setCanTranscribe(false);
@@ -126,12 +136,15 @@ export function VideoDetailTranscript({ video, onClose }: { video: GridVideo; on
       setTranscriptStatus(data.transcriptStatus ?? "ready");
       setTranscriptText(data.transcriptText ?? null);
       setTranscriptSource(data.transcriptSource ?? null);
+      if (data.transcriptText?.trim() && (data.transcriptStatus ?? "ready") === "ready") {
+        showToast("Текст ролика получен", "ok");
+      }
     } catch {
       setPanelError("Ошибка сети");
     } finally {
       setSubmitting(false);
     }
-  }, [video]);
+  }, [video, showToast]);
 
   const onUseInScript = useCallback(() => {
     try {
@@ -186,7 +199,7 @@ export function VideoDetailTranscript({ video, onClose }: { video: GridVideo; on
         </div>
       ) : showText ? (
         <div className="mt-3">
-          <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-3 text-sm leading-relaxed text-zinc-800 [scrollbar-width:thin]">
+          <div className="scrollbar-hidden max-h-[min(50vh,320px)] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-3 text-sm leading-relaxed text-zinc-800">
             {transcriptText}
           </div>
         </div>

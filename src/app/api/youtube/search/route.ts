@@ -28,6 +28,7 @@ import {
   searchYouTubeVideos,
   YouTubeApiError,
 } from "@/lib/youtube";
+import { USER_MSG } from "@/lib/api-user-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +108,7 @@ export async function GET(req: Request) {
   const key = process.env.YOUTUBE_API_KEY?.trim();
   if (!key) {
     return NextResponse.json(
-      { error: "missing_api_key", message: "Задайте YOUTUBE_API_KEY в .env", totalCount },
+      { error: "missing_api_key", message: USER_MSG.youtubeKeyMissing, totalCount },
       { status: 503 },
     );
   }

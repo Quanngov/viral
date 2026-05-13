@@ -6,6 +6,7 @@ import { compactTranscriptJsonForDb, groqTranscribeFromUrl } from "@/lib/groq-tr
 import { prisma } from "@/lib/prisma";
 import { srtOrVttToPlainText } from "@/lib/subtitle-parse";
 import { getGroqWhisperModel, getTranscriptionTokenCost } from "@/lib/transcription-config";
+import { USER_MSG } from "@/lib/api-user-messages";
 import { creditTokens, ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
 import { refreshInstagramVideoFromTikHubForTranscription } from "@/lib/instagram-transcribe-refresh";
 import { resolveVideoForTranscription, type ResolveVideoForTranscriptionInput } from "@/lib/resolve-video-for-transcription";
@@ -251,7 +252,7 @@ export async function POST(req: Request) {
 
   if (!canTrySubtitles && !canTryGroq) {
     const message = !groqKey
-      ? "Транскрибация недоступна: не задан GROQ_API_KEY на сервере."
+      ? USER_MSG.groqKeyMissing
       : v.platform === "instagram"
         ? INSTAGRAM_NO_VIDEO_MSG
         : "Нет субтитров и прямого URL видео для распознавания. Попробуйте обновить ролик в ленте или выберите другой.";
@@ -381,7 +382,7 @@ export async function POST(req: Request) {
     }
     if (!groqKey) {
       await fail("Нет GROQ_API_KEY", { stage: "missing_groq" });
-      return NextResponse.json({ error: "failed", message: "Groq не настроен." }, { status: 503 });
+      return NextResponse.json({ error: "failed", message: USER_MSG.groqKeyMissing }, { status: 503 });
     }
 
     const controller = new AbortController();

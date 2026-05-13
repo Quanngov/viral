@@ -1,12 +1,14 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { ScriptAssistantMarkdown } from "@/components/dashboard/script-generator/ScriptAssistantMarkdown";
 import { formatViewsCount } from "@/lib/format-video";
 import { SCRIPT_REF_DUPLICATE_MESSAGE, SCRIPT_REF_LIMIT_MESSAGE } from "@/lib/script-chat-reference";
+import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
 import { SCRIPT_PROMPT_REF_ONLY } from "@/lib/script-generator-prompt";
+import { useToast } from "@/components/dashboard/ToastContext";
 
 type ChatSummary = { id: string; title: string; updatedAt: string; createdAt: string };
 
@@ -147,6 +149,7 @@ function TokenSpark({ className }: { className?: string }) {
 }
 
 export function ScriptGeneratorSection() {
+  const { showToast } = useToast();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -334,7 +337,7 @@ export function ScriptGeneratorSection() {
         setSelectedChatId(data.chat.id);
         setPrompt("");
         if (data.duplicate) {
-          setNotice(SCRIPT_REF_DUPLICATE_MESSAGE);
+          showToast(SCRIPT_REF_DUPLICATE_MESSAGE, "warn");
         }
         await loadChatMessages(data.chat.id);
         await loadChats();
@@ -349,7 +352,7 @@ export function ScriptGeneratorSection() {
     };
     window.addEventListener("viral-script-reference-intent", onIntent);
     return () => window.removeEventListener("viral-script-reference-intent", onIntent);
-  }, [loadChatMessages, loadChats]);
+  }, [loadChatMessages, loadChats, showToast]);
 
   const persistProfile = useCallback(async (text: string) => {
     setProfileSaved("saving");
@@ -447,24 +450,25 @@ export function ScriptGeneratorSection() {
         };
         if (!res.ok) {
           if (res.status === 409 && data.code === "ref_limit") {
-            setNotice(typeof data.message === "string" ? data.message : SCRIPT_REF_LIMIT_MESSAGE);
+            showToast(typeof data.message === "string" ? data.message : SCRIPT_REF_LIMIT_MESSAGE, "warn");
             return;
           }
           setError(typeof data.message === "string" ? data.message : "Не удалось добавить ролик");
           return;
         }
         if (data.duplicate) {
-          setNotice(SCRIPT_REF_DUPLICATE_MESSAGE);
+          showToast(SCRIPT_REF_DUPLICATE_MESSAGE, "warn");
           await loadChatMessages(chatId);
           return;
         }
+        showToast("Референс добавлен", "ok");
         await loadChatMessages(chatId);
         void loadChats();
       } finally {
         setImportingId(null);
       }
     },
-    [ensureChatId, loadChatMessages, loadChats],
+    [ensureChatId, loadChatMessages, loadChats, showToast],
   );
 
   const onGenerate = useCallback(async () => {
@@ -485,9 +489,17 @@ export function ScriptGeneratorSection() {
         chatTitle?: string;
       };
       if (!res.ok) {
-        setError(data.message ?? (typeof data.error === "string" ? data.error : "Ошибка генерации"));
+        if (res.status === 402) {
+          showToast(messageForHttpStatus(402, data.message), "warn");
+        }
+        setError(
+          sanitizeClientErrorMessage(
+            typeof data.message === "string" ? data.message : typeof data.error === "string" ? data.error : "",
+          ) || "Ошибка генерации",
+        );
         return;
       }
+      showToast("Сценарий готов", "ok");
       if (data.chatTitle) {
         setChats((prev) => prev.map((c) => (c.id === selectedChatId ? { ...c, title: data.chatTitle! } : c)));
       }
@@ -497,7 +509,7 @@ export function ScriptGeneratorSection() {
     } finally {
       setGenerating(false);
     }
-  }, [selectedChatId, prompt, generating, references.length, loadChatMessages, loadChats]);
+  }, [selectedChatId, prompt, generating, references.length, loadChatMessages, loadChats, showToast]);
 
   useEffect(() => {
     if (selectedChatId) return;
@@ -600,9 +612,9 @@ export function ScriptGeneratorSection() {
 
             {showDefaultEmpty ? (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-4 py-8 text-center">
-                <p className="max-w-md text-sm leading-relaxed text-zinc-500">
-                  Напишите, про что нужен сценарий. Справа можно добавить информацию о себе и выбрать референс из сохранённых
-                  роликов.
+                <p className="max-w-md text-base font-semibold text-zinc-800">Напишите, какой сценарий хотите получить</p>
+                <p className="max-w-md text-sm leading-relaxed text-zinc-600">
+                  Можно добавить информацию о себе справа или прикрепить сохраненный ролик как референс.
                 </p>
                 <button
                   type="button"
@@ -635,11 +647,29 @@ export function ScriptGeneratorSection() {
                   }
                   if (m.role === "assistant") {
                     return (
-                      <div
-                        key={m.id}
-                        className="script-msg-enter self-start max-w-[95%] min-w-0 rounded-2xl border border-zinc-200 bg-zinc-50/90 px-4 py-3 text-zinc-900"
-                      >
-                        <ScriptAssistantMarkdown content={m.content} className="min-w-0" />
+                      <div key={m.id} className="script-msg-enter w-full max-w-[95%] self-start min-w-0">
+                        <div className="mb-1 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void (async () => {
+                                try {
+                                  await navigator.clipboard.writeText(m.content);
+                                  showToast("Сценарий скопирован", "ok");
+                                } catch {
+                                  showToast("Не удалось скопировать", "warn");
+                                }
+                              })();
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-900"
+                          >
+                            <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            Копировать
+                          </button>
+                        </div>
+                        <div className="rounded-2xl border border-zinc-200 bg-zinc-50/90 px-4 py-3 text-zinc-900">
+                          <ScriptAssistantMarkdown content={m.content} className="min-w-0" />
+                        </div>
                       </div>
                     );
                   }

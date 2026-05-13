@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useToast } from "@/components/dashboard/ToastContext";
 import type { GridVideo } from "@/lib/mock-data";
 import { gridVideoToSavePayload, type SaveVideoSourceType } from "@/lib/saved-video-mapper";
 import { parseVideoClientId } from "@/lib/video-client-id";
@@ -18,7 +19,7 @@ type SavedMap = Record<string, boolean>;
 
 type SavedVideosContextValue = {
   isSaved: (clientId: string) => boolean;
-  toggle: (video: GridVideo, opts?: { sourceType?: SaveVideoSourceType; sourceId?: string | null }) => Promise<void>;
+  toggle: (video: GridVideo, opts?: { sourceType?: SaveVideoSourceType; sourceId?: string | null }) => Promise<boolean>;
   refreshFromServer: () => Promise<void>;
   hydrateForVideos: (videos: GridVideo[]) => Promise<void>;
   savedCount: number;
@@ -47,6 +48,7 @@ async function fetchSavedMap(): Promise<SavedMap> {
 }
 
 export function SavedVideosProvider({ children }: { children: ReactNode }) {
+  const { showToast } = useToast();
   const [savedMap, setSavedMap] = useState<SavedMap>({});
   const [removedSavedClientIds, setRemovedSavedClientIds] = useState<Set<string>>(() => new Set());
   const [lastError, setLastError] = useState<string | null>(null);
@@ -120,7 +122,7 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
       const parsed = parseVideoClientId(clientId);
       if (!parsed) {
         setLastError("Некорректный идентификатор ролика");
-        return;
+        return false;
       }
       const key = `${parsed.platform}:${parsed.externalId}`;
       const was = Boolean(savedMap[key]);
@@ -142,6 +144,7 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
           );
           if (!res.ok) throw new Error("delete_failed");
           markRemovedFromSavedList(clientId);
+          showToast("Ролик удален из сохраненных", "ok");
         } else {
           const payload = gridVideoToSavePayload(video, opts);
           if (!payload) throw new Error("bad_payload");
@@ -151,7 +154,9 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify(payload),
           });
           if (!res.ok) throw new Error("post_failed");
+          showToast("Ролик сохранен", "ok");
         }
+        return true;
       } catch {
         setSavedMap((prev) => {
           const next = { ...prev };
@@ -160,11 +165,12 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
           return next;
         });
         setLastError("Не удалось обновить сохранение");
+        return false;
       } finally {
         if (mounted.current) setBusyClientId(null);
       }
     },
-    [savedMap, markRemovedFromSavedList],
+    [savedMap, markRemovedFromSavedList, showToast],
   );
 
   const savedCount = useMemo(() => Object.keys(savedMap).filter((k) => savedMap[k]).length, [savedMap]);

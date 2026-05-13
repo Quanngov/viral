@@ -13,6 +13,8 @@ import {
 } from "@/components/dashboard/search-results-utils";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
+import { useToast } from "@/components/dashboard/ToastContext";
+import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
 
 type SearchResultsSectionProps = {
   searchCost: number;
@@ -26,6 +28,7 @@ type FeedSession = {
 };
 
 export function SearchResultsSection({ searchCost, onVideoClick }: SearchResultsSectionProps) {
+  const { showToast } = useToast();
   const { hydrateForVideos, lastError, clearError } = useSavedVideos();
   const [sourceVideos, setSourceVideos] = useState<GridVideo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -108,6 +111,7 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
       noMore?: boolean;
       message?: string;
       error?: string;
+      userHint?: string;
     };
     return { res, data };
   }
@@ -142,12 +146,16 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
       if (typeof data.tokensRemaining === "number") setTokensRemaining(data.tokensRemaining);
 
       if (res.status === 402 || data.tokensOk === false) {
-        setError(data.message || "Недостаточно внутренних токенов");
+        setError(messageForHttpStatus(402, data.message));
         return;
       }
 
       if (!res.ok) {
         throw new Error(data.message || data.error || `Ошибка ${res.status}`);
+      }
+
+      if (typeof data.userHint === "string" && data.userHint.trim()) {
+        showToast(data.userHint.trim(), "warn");
       }
 
       setSession({ q, platform: payload.platform, locale: payload.locale });
@@ -156,7 +164,7 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
       setNoMore(Boolean(data.noMore));
       if (typeof data.totalCount === "number") setTotalCount(data.totalCount);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось выполнить поиск");
+      setError(sanitizeClientErrorMessage(e instanceof Error ? e.message : ""));
     } finally {
       setLoading(false);
     }
@@ -187,12 +195,16 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
       if (typeof data.tokensRemaining === "number") setTokensRemaining(data.tokensRemaining);
 
       if (res.status === 402 || data.tokensOk === false) {
-        setError(data.message || "Недостаточно внутренних токенов");
+        setError(messageForHttpStatus(402, data.message));
         return;
       }
 
       if (!res.ok) {
         throw new Error(data.message || data.error || `Ошибка ${res.status}`);
+      }
+
+      if (typeof data.userHint === "string" && data.userHint.trim()) {
+        showToast(data.userHint.trim(), "warn");
       }
 
       const chunk = Array.isArray(data.videos) ? data.videos : [];
@@ -206,7 +218,7 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
       }
       if (typeof data.totalCount === "number") setTotalCount(data.totalCount);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось догрузить ролики");
+      setError(sanitizeClientErrorMessage(e instanceof Error ? e.message : ""));
     } finally {
       setLoading(false);
     }
@@ -239,6 +251,8 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
   const busy = loading || boot;
   const displayedVideos = videos;
   const showLoadMore = Boolean(session) && !busy && !noMore;
+  const showHomeEmpty = !boot && !session && displayedVideos.length === 0 && !busy;
+  const showSearchEmpty = Boolean(session) && !busy && displayedVideos.length === 0;
 
   const statsParts: string[] = [];
   if (totalCount !== null) {
@@ -272,9 +286,19 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
         <p className="text-xs text-zinc-600">{statsParts.join(" • ")}</p>
       ) : null}
 
-      {!busy && videos.length === 0 && !session ? (
-        <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-6 py-16 text-center text-sm text-zinc-500 shadow-sm">
-          В базе пока нет роликов. Выполните первый поиск.
+      {showHomeEmpty ? (
+        <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-6 py-16 text-center shadow-sm shadow-zinc-900/5">
+          <p className="text-base font-semibold text-zinc-800">В базе пока нет роликов</p>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+            Выполните первый поиск по теме — подберём ролики из базы и внешних источников.
+          </p>
+        </div>
+      ) : showSearchEmpty ? (
+        <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-6 py-16 text-center shadow-sm shadow-zinc-900/5">
+          <p className="text-base font-semibold text-zinc-800">Ничего не найдено</p>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+            Попробуйте другой запрос или нажмите «Показать еще», чтобы добрать новые ролики.
+          </p>
         </div>
       ) : (
         <>
@@ -288,10 +312,10 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
               <button
                 type="button"
                 onClick={loadMore}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:opacity-50"
-                disabled={loading}
+                className="inline-flex min-h-[2.75rem] min-w-[10.5rem] items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-50"
+                disabled={loading || boot}
               >
-                <LightningIcon className="h-4 w-4 text-emerald-100" />
+                <LightningIcon className="h-4 w-4 shrink-0 text-emerald-100" />
                 <span className="tabular-nums">{searchCost}</span>
                 <span className="text-emerald-100">·</span>
                 <span>Показать еще</span>

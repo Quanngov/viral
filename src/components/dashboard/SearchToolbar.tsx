@@ -188,7 +188,8 @@ export function SearchToolbar({
                 e.stopPropagation();
                 toggle("locale");
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800"
+              disabled={searching}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800 disabled:pointer-events-none disabled:opacity-50"
               aria-expanded={open === "locale"}
               aria-label="Язык и регион"
             >
@@ -221,7 +222,8 @@ export function SearchToolbar({
                 e.stopPropagation();
                 toggle("filter");
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800"
+              disabled={searching}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800 disabled:pointer-events-none disabled:opacity-50"
               aria-expanded={open === "filter"}
               aria-label="Сортировка"
             >
@@ -254,7 +256,8 @@ export function SearchToolbar({
                 e.stopPropagation();
                 toggle("calendar");
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800"
+              disabled={searching}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800 disabled:pointer-events-none disabled:opacity-50"
               aria-expanded={open === "calendar"}
               aria-label="Период"
             >
@@ -287,7 +290,8 @@ export function SearchToolbar({
                 e.stopPropagation();
                 toggle("views");
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800"
+              disabled={searching}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800 disabled:pointer-events-none disabled:opacity-50"
               aria-expanded={open === "views"}
               aria-label="Минимальные просмотры"
             >

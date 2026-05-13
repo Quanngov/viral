@@ -48,15 +48,21 @@ export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectio
   }, [isActive, savedCount, clearSavedListOptimisticRemovals]);
 
   const gridVideos = useMemo(() => {
+    const seen = new Set<string>();
     return rows
       .map((r) => savedVideoToGridVideo(r))
-      .filter((v) => !isOptimisticallyRemovedFromSavedList(v.id));
+      .filter((v) => !isOptimisticallyRemovedFromSavedList(v.id))
+      .filter((v) => {
+        if (seen.has(v.id)) return false;
+        seen.add(v.id);
+        return true;
+      });
   }, [rows, isOptimisticallyRemovedFromSavedList]);
 
   if (!isActive) return null;
 
   return (
-    <section className="px-6 pt-5">
+    <section className="min-w-0 px-6 pt-5">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Сохраненные ролики</h1>
       <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-600">
         Все ролики, которые вы сохранили для дальнейшей работы
@@ -65,18 +71,22 @@ export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectio
         Сохранено: <span className="tabular-nums text-emerald-800">{savedCount}</span>
       </p>
 
-      {!loading && gridVideos.length === 0 ? (
+      {loading ? (
+        <div className="mt-6">
+          <VideoGrid videos={[]} loading onVideoClick={onVideoClick} cardVariant="detailed" />
+        </div>
+      ) : gridVideos.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-zinc-200 bg-white/80 px-6 py-16 text-center shadow-sm shadow-zinc-900/5">
-          <p className="text-base font-semibold text-zinc-800">Пока нет сохраненных роликов</p>
-          <p className="mt-2 text-sm text-zinc-600">
-            Нажмите на иконку сохранения на карточке ролика, чтобы добавить его сюда.
+          <p className="text-base font-semibold text-zinc-800">Вы пока не сохранили ни одного ролика</p>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+            Сохраняйте ролики из поиска или шпиона, чтобы быстро возвращаться к ним и использовать в сценариях.
           </p>
         </div>
       ) : (
-        <div className="mt-6">
+        <div className="mt-6 min-w-0">
           <VideoGrid
             videos={gridVideos}
-            loading={loading}
+            loading={false}
             onVideoClick={onVideoClick}
             cardVariant="detailed"
           />

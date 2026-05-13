@@ -121,6 +121,15 @@ function AdminVideosInner() {
   const [metaError, setMetaError] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
 
+  type ApiHealth = {
+    tikhub: string;
+    youtube: string;
+    deepseek: string;
+    groq: string;
+    database: string;
+  };
+  const [apiHealth, setApiHealth] = useState<ApiHealth | null>(null);
+
   const [detail, setDetail] = useState<AdminVideoRow | null>(null);
 
   useEffect(() => {
@@ -154,6 +163,23 @@ function AdminVideosInner() {
       }
     }
     loadMeta();
+    return () => {
+      cancel = true;
+    };
+  }, [appendKey]);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(appendKey("/api/admin/health"));
+        if (!res.ok) return;
+        const h = (await res.json()) as ApiHealth;
+        if (!cancel) setApiHealth(h);
+      } catch {
+        if (!cancel) setApiHealth(null);
+      }
+    })();
     return () => {
       cancel = true;
     };
@@ -236,6 +262,35 @@ function AdminVideosInner() {
       </header>
 
       <main className="mx-auto max-w-[1800px] space-y-6 px-8 py-6">
+        {apiHealth ? (
+          <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
+            <h2 className="text-sm font-semibold text-zinc-900">Статус API</h2>
+            <p className="mt-1 text-xs text-zinc-500">Только факт наличия ключей в окружении, без значений.</p>
+            <ul className="mt-3 grid gap-2 text-sm text-zinc-800 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              <li>
+                <span className="font-medium">TikHub:</span>{" "}
+                {apiHealth.tikhub === "connected" ? "подключен" : "не задан"}
+              </li>
+              <li>
+                <span className="font-medium">YouTube:</span>{" "}
+                {apiHealth.youtube === "connected" ? "подключен" : "не задан"}
+              </li>
+              <li>
+                <span className="font-medium">DeepSeek:</span>{" "}
+                {apiHealth.deepseek === "connected" ? "подключен" : "не задан"}
+              </li>
+              <li>
+                <span className="font-medium">Groq:</span>{" "}
+                {apiHealth.groq === "connected" ? "подключен" : "не задан"}
+              </li>
+              <li>
+                <span className="font-medium">DATABASE_URL:</span>{" "}
+                {apiHealth.database === "connected" ? "подключен" : "не задан"}
+              </li>
+            </ul>
+          </section>
+        ) : null}
+
         <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Всего роликов" highlight value={stats ? stats.totalVideos : "—"} />
           <StatCard label="YouTube" value={stats ? stats.youtubeCount : "—"} />
