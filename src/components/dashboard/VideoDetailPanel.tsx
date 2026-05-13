@@ -5,6 +5,7 @@ import Image from "next/image";
 import type { GridVideo } from "@/lib/mock-data";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { SaveBookmarkButton } from "@/components/dashboard/SaveBookmarkButton";
+import { MockScriptGeneratorModal, MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
 import { formatViewsCount } from "@/lib/format-video";
 
 type VideoDetailPanelProps = {
@@ -25,6 +26,10 @@ function resolvePlatform(video: GridVideo): "youtube" | "instagram" | "tiktok" {
 export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose }: VideoDetailPanelProps) {
   const [playInModal, setPlayInModal] = useState(false);
   const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+  const [scriptModalOpen, setScriptModalOpen] = useState(false);
+  const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false);
+  const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
+  const [contentPlanModalOpen, setContentPlanModalOpen] = useState(false);
 
   useEffect(() => {
     if (!video) return;
@@ -201,7 +206,7 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
                   </p>
                   <button
                     type="button"
-                    onClick={() => console.log("transcription soon")}
+                    onClick={() => setTranscriptionModalOpen(true)}
                     className="absolute inset-x-0 top-1/2 mx-auto inline-flex w-fit -translate-y-1/2 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
                   >
                     <span className="tabular-nums">5</span>
@@ -249,18 +254,21 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   type="button"
+                  onClick={() => setAnalyzeModalOpen(true)}
                   className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
                 >
                   Анализировать
                 </button>
                 <button
                   type="button"
+                  onClick={() => setScriptModalOpen(true)}
                   className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
                 >
                   Сценарий
                 </button>
                 <button
                   type="button"
+                  onClick={() => setContentPlanModalOpen(true)}
                   className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
                 >
                   В контент-план
@@ -270,6 +278,26 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
           </div>
         </div>
       </section>
+
+      <MockScriptGeneratorModal open={scriptModalOpen} onClose={() => setScriptModalOpen(false)} video={video} />
+      <MockSimpleInfoModal
+        open={transcriptionModalOpen}
+        onClose={() => setTranscriptionModalOpen(false)}
+        title="Транскрибация"
+        body="Демо-режим: реальная транскрибация и списание токенов не выполняются. Здесь появится расшифровка речи из ролика."
+      />
+      <MockSimpleInfoModal
+        open={analyzeModalOpen}
+        onClose={() => setAnalyzeModalOpen(false)}
+        title="Анализ ролика"
+        body="Демо-режим: AI-анализ метрик и структуры ролика не запускается. Используйте «Сценарий» для макета генерации сценария."
+      />
+      <MockSimpleInfoModal
+        open={contentPlanModalOpen}
+        onClose={() => setContentPlanModalOpen(false)}
+        title="Контент-план"
+        body="Демо-режим: добавление в календарь публикаций пока не реализовано. Сохранение ролика в «Сохранённые» работает как раньше."
+      />
     </div>
   );
 });

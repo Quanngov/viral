@@ -148,3 +148,64 @@ export async function spendTokens(
     return { ok: false, balance: row?.balance ?? 0 };
   }
 }
+
+/**
+ * Возврат токенов на баланс (положительная запись в TokenTransaction).
+ */
+export async function creditTokens(
+  userId: string,
+  amount: number,
+  reason: string,
+  ctx?: { sessionId?: string },
+): Promise<{ ok: boolean; balance: number }> {
+  if (amount <= 0) {
+    const row = await prisma.userTokenBalance.findUnique({
+      where: { userId },
+      select: { balance: true },
+    });
+    return { ok: true, balance: row?.balance ?? DEFAULT_BALANCE };
+  }
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.userTokenBalance.upsert({
+        where: { userId },
+        create: { userId, balance: DEFAULT_BALANCE },
+        update: {},
+      });
+      const row = await tx.userTokenBalance.update({
+        where: { userId },
+        data: { balance: { increment: amount } },
+        select: { balance: true },
+      });
+      await tx.tokenTransaction.create({
+        data: { userId, amount, reason },
+      });
+      return row.balance;
+    });
+    void logAdminEvent({
+      level: "info",
+      type: "token_spend",
+      message: "Начисление токенов (возврат)",
+      sessionId: ctx?.sessionId,
+      userId,
+      meta: { reason, amount, balanceAfter: updated },
+    });
+    return { ok: true, balance: updated };
+  } catch (e) {
+    console.warn("[token-wallet] credit failed", e instanceof Error ? e.message : e);
+    void logAdminEvent({
+      level: "error",
+      type: "token_spend",
+      message: "Ошибка начисления токенов",
+      sessionId: ctx?.sessionId,
+      userId,
+      meta: { reason, amount, error: e instanceof Error ? { name: e.name, message: e.message } : String(e) },
+    });
+    const row = await prisma.userTokenBalance.findUnique({
+      where: { userId },
+      select: { balance: true },
+    });
+    return { ok: false, balance: row?.balance ?? 0 };
+  }
+}

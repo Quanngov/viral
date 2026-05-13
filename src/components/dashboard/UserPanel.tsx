@@ -1,7 +1,18 @@
-import type { ReactNode } from "react";
-import type { MockUser } from "@/lib/mock-data";
+"use client";
 
-export type DashboardView = "home" | "competitors" | "saved";
+import { FilePenLine } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import type { MockUser } from "@/lib/mock-data";
+import { DashboardAnchoredLayer } from "@/components/dashboard/DashboardModal";
+import {
+  MockAuthModal,
+  MockProfileModal,
+  MockSettingsModal,
+  MockSimpleInfoModal,
+  MockTokenPlansModal,
+} from "@/components/dashboard/mock-dashboard-panels";
+
+export type DashboardView = "home" | "competitors" | "saved" | "scripts";
 
 const tools: { key: string; label: string; view?: DashboardView; soon?: boolean; icon: ReactNode }[] = [
   {
@@ -42,10 +53,11 @@ const tools: { key: string; label: string; view?: DashboardView; soon?: boolean;
   {
     key: "scripts",
     label: "Генерация сценариев",
+    view: "scripts",
     icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9 3 3m0 0 3-3m-3 3v.008M12 15h.008v.008H12V15Zm-3 6h6a2.25 2.25 0 0 0 2.25-2.25V13.5a2.25 2.25 0 0 0-2.25-2.25H9A2.25 2.25 0 0 0 6.75 13.5V18A2.25 2.25 0 0 0 9 20.25Z" />
-      </svg>
+      <span className="text-current [&>svg]:h-4 [&>svg]:w-4">
+        <FilePenLine className="h-4 w-4" strokeWidth={2} aria-hidden />
+      </span>
     ),
   },
   {
@@ -69,6 +81,17 @@ type UserPanelProps = {
 };
 
 export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
+  const profileWrapRef = useRef<HTMLDivElement>(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [tokenPlansOpen, setTokenPlansOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "logout">("login");
+  const [serviceMenuOpen, setServiceMenuOpen] = useState(false);
+
+  const closeProfileMenu = () => setProfileMenuOpen(false);
+
   return (
     <aside className="shrink-0 bg-transparent px-3 pb-3 pt-2">
       <div className="flex flex-col rounded-xl bg-white p-3 shadow-sm shadow-zinc-900/5">
@@ -93,6 +116,7 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
           </div>
           <button
             type="button"
+            onClick={() => setTokenPlansOpen(true)}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
             aria-label="Пополнить токены"
           >
@@ -105,6 +129,10 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button
             type="button"
+            onClick={() => {
+              closeProfileMenu();
+              setSettingsOpen(true);
+            }}
             className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
           >
             <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
@@ -113,15 +141,83 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
             </svg>
             Настройки
           </button>
-          <button
-            type="button"
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
-          >
-            <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-            </svg>
-            Профиль
-          </button>
+          <div ref={profileWrapRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen((v) => !v)}
+              aria-expanded={profileMenuOpen}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
+            >
+              <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+              </svg>
+              Профиль
+            </button>
+            <DashboardAnchoredLayer
+              open={profileMenuOpen}
+              onClose={() => setProfileMenuOpen(false)}
+              anchorRef={profileWrapRef}
+              matchAnchorWidth
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
+                onClick={() => {
+                  closeProfileMenu();
+                  setProfileModalOpen(true);
+                }}
+              >
+                Профиль
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
+                onClick={() => {
+                  closeProfileMenu();
+                  setSettingsOpen(true);
+                }}
+              >
+                Настройки
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
+                onClick={() => {
+                  closeProfileMenu();
+                  setTokenPlansOpen(true);
+                }}
+              >
+                Тарифы
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
+                onClick={() => {
+                  closeProfileMenu();
+                  setAuthMode("login");
+                  setAuthOpen(true);
+                }}
+              >
+                Войти
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
+                onClick={() => {
+                  closeProfileMenu();
+                  setAuthMode("logout");
+                  setAuthOpen(true);
+                }}
+              >
+                Выйти
+              </button>
+            </DashboardAnchoredLayer>
+          </div>
         </div>
 
         <nav className="mt-2 flex flex-col gap-0 border-t border-zinc-100 pt-1.5">
@@ -155,6 +251,7 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
           <span className="truncate text-base font-semibold tracking-tight text-zinc-800">{SERVICE_NAME}</span>
           <button
             type="button"
+            onClick={() => setServiceMenuOpen(true)}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800"
             aria-label="Меню сервиса"
           >
@@ -164,6 +261,23 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
           </button>
         </div>
       </div>
+
+      <MockTokenPlansModal open={tokenPlansOpen} onClose={() => setTokenPlansOpen(false)} balanceTokens={user.tokens} />
+      <MockSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <MockProfileModal
+        open={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+        email={user.email}
+        plan={user.plan}
+        anchorRef={profileWrapRef}
+      />
+      <MockAuthModal open={authOpen} onClose={() => setAuthOpen(false)} mode={authMode} />
+      <MockSimpleInfoModal
+        open={serviceMenuOpen}
+        onClose={() => setServiceMenuOpen(false)}
+        title="Сервис"
+        body="Демо-меню: поддержка, документация и юридическая информация появятся позже. Рабочие функции дашборда не затронуты."
+      />
     </aside>
   );
 }

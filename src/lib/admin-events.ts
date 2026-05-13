@@ -32,7 +32,11 @@ export type AdminEventType =
   | "competitor_daily_sync_start"
   | "competitor_daily_sync_success"
   | "competitor_daily_sync_failed"
-  | "competitor_daily_sync_skipped";
+  | "competitor_daily_sync_skipped"
+  | "script_generate_start"
+  | "script_generate_success"
+  | "script_generate_error"
+  | "script_token_spend";
 
 export type LogAdminEventInput = {
   level: AdminEventLevel;
@@ -74,8 +78,14 @@ export function safeMeta(input: unknown, depth = 0): unknown {
   }
   if (!isPlainObject(input)) return String(input);
 
+  const redactedKeys = new Set(["prompt", "completion", "assistantRaw", "fullResponse"]);
+
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
+    if (redactedKeys.has(k)) {
+      out[k] = "[redacted]";
+      continue;
+    }
     if (SENSITIVE_KEY_RE.test(k)) {
       out[k] = "[redacted]";
       continue;

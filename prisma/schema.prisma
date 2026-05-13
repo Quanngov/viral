@@ -157,6 +157,51 @@ model SessionUser {
   savedVideos          SavedVideo[]
   competitorAccounts   CompetitorAccount[]
   competitorDailySyncs CompetitorDailySync[]
+  scriptChats          ScriptChat[]
+  scriptUserProfile    ScriptUserProfile?
+}
+
+/** Настройки сценариста для генерации (одна запись на session user). */
+model ScriptUserProfile {
+  id              String      @id @default(cuid())
+  userId          String      @unique
+  user            SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occupation      String      @default("")
+  targetAudience  String      @default("")
+  tone            String      @default("")
+  cta             String      @default("")
+  restrictions    String      @default("")
+  /** Свободный текст профиля для сценариев (приоритет над полями выше). */
+  profileText     String      @default("")
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+model ScriptChat {
+  id        String         @id @default(cuid())
+  userId    String
+  user      SessionUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String         @default("Новый чат")
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  messages  ScriptMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model ScriptMessage {
+  id               String     @id @default(cuid())
+  chatId           String
+  chat             ScriptChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  /** user | assistant | system (system — импорт контекста ролика) */
+  role             String
+  content          String
+  /** id строки SavedVideo при импорте */
+  savedVideoId     String?
+  createdAt        DateTime   @default(now())
+
+  @@index([chatId, createdAt])
 }
 
 model SavedVideo {

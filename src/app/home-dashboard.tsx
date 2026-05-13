@@ -9,6 +9,7 @@ import { SavedVideosProvider } from "@/components/dashboard/SavedVideosContext";
 import { SavedVideosSection } from "@/components/dashboard/SavedVideosSection";
 import { SearchResultsSection } from "@/components/dashboard/SearchResultsSection";
 import { VideoDetailPanel } from "@/components/dashboard/VideoDetailPanel";
+import { ScriptsSection } from "@/components/dashboard/ScriptsSection";
 import { UserPanel, type DashboardView } from "@/components/dashboard/UserPanel";
 import { WeeklyTrendsSection } from "@/components/dashboard/WeeklyTrendsSection";
 import type { GridVideo } from "@/lib/mock-data";
@@ -17,6 +18,7 @@ import { mockUser, mockWeeklyTrends } from "@/lib/mock-data";
 function tabQueryToView(tab: string | null): DashboardView {
   if (tab === "competitors") return "competitors";
   if (tab === "saved") return "saved";
+  if (tab === "scripts") return "scripts";
   if (tab === "search") return "home";
   return "home";
 }
@@ -24,6 +26,7 @@ function tabQueryToView(tab: string | null): DashboardView {
 function viewToTabQuery(view: DashboardView): string {
   if (view === "competitors") return "competitors";
   if (view === "saved") return "saved";
+  if (view === "scripts") return "scripts";
   return "home";
 }
 
@@ -52,7 +55,7 @@ function HomeDashboardInner() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab && !["home", "competitors", "saved", "search"].includes(tab)) {
+    if (tab && !["home", "competitors", "saved", "search", "scripts"].includes(tab)) {
       const q = new URLSearchParams(searchParams.toString());
       q.delete("tab");
       const qs = q.toString();
@@ -68,7 +71,13 @@ function HomeDashboardInner() {
           <UserPanel user={mockUser} activeView={activeView} onChangeView={setActiveView} />
         </div>
 
-        <div className="min-w-0 flex-1 bg-transparent pb-12 pt-0">
+        <div
+          className={`flex min-h-0 min-w-0 flex-1 flex-col bg-transparent pt-0 ${
+            activeView === "scripts"
+              ? "h-[100dvh] max-h-[100dvh] overflow-hidden pb-3 sm:pb-4"
+              : "pb-12"
+          }`}
+        >
           {activeView === "home" ? (
             <>
               <WeeklyTrendsSection
@@ -82,8 +91,12 @@ function HomeDashboardInner() {
             </>
           ) : activeView === "competitors" ? (
             <CompetitorSpySection onVideoClick={setSelectedVideo} />
+          ) : activeView === "saved" ? (
+            <SavedVideosSection isActive onVideoClick={setSelectedVideo} />
           ) : (
-            <SavedVideosSection isActive={activeView === "saved"} onVideoClick={setSelectedVideo} />
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+              <ScriptsSection />
+            </div>
           )}
         </div>
         <VideoDetailPanel video={selectedVideo} onClose={() => setSelectedVideo(null)} />
