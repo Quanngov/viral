@@ -51,9 +51,20 @@ model Video {
   usefulRaw          String?
   cacheUrl           String?
 
+  transcriptText       String?
+  transcriptJson       Json?
+  /** null | processing | ready | failed */
+  transcriptStatus     String?
+  /** subtitles | groq_whisper */
+  transcriptSource     String?
+  transcriptLanguage   String?
+  transcriptCreatedAt  DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   lastFetchedAt DateTime?
+
+  scriptChatReferences ScriptChatReference[]
 
   @@unique([platform, externalId])
   @@index([sourceQuery])
@@ -129,11 +140,18 @@ model CompetitorVideo {
   title           String
   description     String?
   thumbnailUrl    String?
+  videoUrl        String?
+  subtitlesUrl    String?
+  usefulRaw       String?
   publishedAt     DateTime
   durationSeconds Int
   views           Int     @default(0)
   likes           Int     @default(0)
   comments        Int     @default(0)
+  shares          Int     @default(0)
+  authorUsername     String?
+  authorDisplayName  String?
+  authorAvatarUrl    String?
   score           Int     @default(1)
   viralScore      Float   @default(0)
   viewsPerHour    Float   @default(0)
@@ -186,8 +204,41 @@ model ScriptChat {
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
   messages  ScriptMessage[]
+  references ScriptChatReference[]
 
   @@index([userId, updatedAt])
+}
+
+model ScriptChatReference {
+  id                  String     @id @default(cuid())
+  chatId              String
+  chat                ScriptChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  /** Связь с общей таблицей Video (транскрипт подтягивается отсюда). */
+  videoId             String?
+  video               Video?     @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  savedVideoId        String?
+  competitorVideoId   String?
+
+  platform            String
+  externalId          String
+  title               String
+  thumbnailUrl        String?
+  videoUrl            String?
+  url                 String
+  authorUsername      String?
+  authorDisplayName   String?
+  views               Int        @default(0)
+  rating              Int        @default(0)
+  durationSeconds     Int?
+  publishedAt         DateTime?
+  description         String?
+  /** Снимок источника транскрипта на момент добавления. */
+  transcriptSource    String?
+  createdAt           DateTime   @default(now())
+
+  @@unique([chatId, platform, externalId])
+  @@index([chatId])
+  @@index([videoId])
 }
 
 model ScriptMessage {

@@ -118,6 +118,7 @@ export function savedVideoToGridVideo(row: SavedVideo): GridVideo {
 
   return {
     id,
+    savedVideoDbId: row.id,
     platform: platformUi,
     externalId: row.externalId,
     youtubeId: row.platform === "youtube" ? row.externalId : null,

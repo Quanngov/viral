@@ -36,7 +36,12 @@ export type AdminEventType =
   | "script_generate_start"
   | "script_generate_success"
   | "script_generate_error"
-  | "script_token_spend";
+  | "script_token_spend"
+  | "transcript_start"
+  | "transcript_cache_hit"
+  | "transcript_subtitles_success"
+  | "transcript_groq_success"
+  | "transcript_failed";
 
 export type LogAdminEventInput = {
   level: AdminEventLevel;
@@ -78,7 +83,7 @@ export function safeMeta(input: unknown, depth = 0): unknown {
   }
   if (!isPlainObject(input)) return String(input);
 
-  const redactedKeys = new Set(["prompt", "completion", "assistantRaw", "fullResponse"]);
+  const redactedKeys = new Set(["prompt", "completion", "assistantRaw", "fullResponse", "transcriptJson"]);
 
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {

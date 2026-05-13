@@ -22,9 +22,13 @@ export type CompetitorVideo = {
   thumbnailUrl: string;
   caption?: string;
   description?: string | null;
+  videoUrl?: string | null;
+  subtitlesUrl?: string | null;
+  usefulRaw?: string | null;
   views: number;
   likes: number;
   comments: number;
+  shares?: number;
   score: number;
   viralScore?: number;
   viewsPerHour?: number;
@@ -32,6 +36,9 @@ export type CompetitorVideo = {
   publishedAt: string;
   createdAt: string;
   durationSeconds?: number;
+  authorUsername?: string | null;
+  authorDisplayName?: string | null;
+  authorAvatarUrl?: string | null;
 };
 
 export const mockCompetitorAccounts: CompetitorAccount[] = [

@@ -49,6 +49,13 @@ export type GridVideo = {
   likesCount?: number;
   authorAvatarUrl?: string | null;
   durationSeconds?: number;
+  /** id строки SavedVideo — для транскрибации без привязки к общей ленте в UI. */
+  savedVideoDbId?: string;
+  /** id строки CompetitorVideo — шпион конкурентов. */
+  competitorVideoDbId?: string;
+  /** Состояние транскрибации (если ролик из БД ленты). */
+  transcriptStatus?: string | null;
+  transcriptSource?: string | null;
   /** Откуда сохранён / открыт (для модалки). */
   savedFrom?: { sourceType: "feed" | "competitor" | "unknown"; sourceId?: string | null };
 };

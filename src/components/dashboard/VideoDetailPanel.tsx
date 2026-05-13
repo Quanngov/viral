@@ -5,6 +5,7 @@ import Image from "next/image";
 import type { GridVideo } from "@/lib/mock-data";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { SaveBookmarkButton } from "@/components/dashboard/SaveBookmarkButton";
+import { VideoDetailTranscript } from "@/components/dashboard/VideoDetailTranscript";
 import { MockScriptGeneratorModal, MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
 import { formatViewsCount } from "@/lib/format-video";
 
@@ -27,7 +28,6 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
   const [playInModal, setPlayInModal] = useState(false);
   const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
   const [scriptModalOpen, setScriptModalOpen] = useState(false);
-  const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false);
   const [analyzeModalOpen, setAnalyzeModalOpen] = useState(false);
   const [contentPlanModalOpen, setContentPlanModalOpen] = useState(false);
 
@@ -198,31 +198,7 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
             </div>
 
             <div>
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                <p className="text-sm font-semibold text-zinc-900">Текст ролика</p>
-                <div className="relative mt-3 min-h-[150px] rounded-xl bg-white p-4">
-                  <p className="blur-sm text-sm leading-relaxed text-zinc-600 opacity-80">
-                    Здесь будет расшифровка речи из ролика после транскрибации...
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setTranscriptionModalOpen(true)}
-                    className="absolute inset-x-0 top-1/2 mx-auto inline-flex w-fit -translate-y-1/2 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
-                  >
-                    <span className="tabular-nums">5</span>
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-                      <path
-                        d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span>Транскрибация</span>
-                  </button>
-                </div>
-              </div>
+              <VideoDetailTranscript video={video} onClose={onClose} />
 
               <div className="mt-3 rounded-2xl border border-zinc-200 bg-white">
                 <button
@@ -280,12 +256,6 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, onClose 
       </section>
 
       <MockScriptGeneratorModal open={scriptModalOpen} onClose={() => setScriptModalOpen(false)} video={video} />
-      <MockSimpleInfoModal
-        open={transcriptionModalOpen}
-        onClose={() => setTranscriptionModalOpen(false)}
-        title="Транскрибация"
-        body="Демо-режим: реальная транскрибация и списание токенов не выполняются. Здесь появится расшифровка речи из ролика."
-      />
       <MockSimpleInfoModal
         open={analyzeModalOpen}
         onClose={() => setAnalyzeModalOpen(false)}

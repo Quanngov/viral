@@ -4,7 +4,7 @@ import { logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { deepseekChatCompletion, DeepSeekError } from "@/lib/deepseek-generate";
 import { creditTokens, ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
 import { getDeepSeekEnv, getScriptGenerationTokenCost } from "@/lib/script-generator-config";
-import { buildDeepSeekMessages } from "@/lib/script-generator-prompt";
+import { buildDeepSeekMessages, buildReferencesPromptBlock, SCRIPT_PROMPT_REF_ONLY } from "@/lib/script-generator-prompt";
 
 export const dynamic = "force-dynamic";
 
@@ -23,10 +23,7 @@ export async function POST(req: Request) {
   }
   const o = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const chatId = typeof o.chatId === "string" ? o.chatId.trim() : "";
-  const prompt = typeof o.prompt === "string" ? o.prompt.trim().slice(0, MAX_PROMPT) : "";
-  if (!chatId || !prompt) {
-    return NextResponse.json({ error: "bad_request", message: "Нужны chatId и непустой prompt" }, { status: 400 });
-  }
+  const promptTrim = typeof o.prompt === "string" ? o.prompt.trim().slice(0, MAX_PROMPT) : "";
 
   const chat = await prisma.scriptChat.findFirst({
     where: { id: chatId, userId },
@@ -34,6 +31,35 @@ export async function POST(req: Request) {
   if (!chat) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+
+  const refRows = await prisma.scriptChatReference.findMany({
+    where: { chatId },
+    orderBy: { createdAt: "asc" },
+    take: 1,
+    include: {
+      video: {
+        select: {
+          transcriptText: true,
+          transcriptSource: true,
+          durationSeconds: true,
+        },
+      },
+    },
+  });
+  const refCount = refRows.length;
+  const referencesPrompt = buildReferencesPromptBlock(refRows);
+
+  if (!chatId || (!promptTrim && refCount === 0)) {
+    return NextResponse.json(
+      {
+        error: "bad_request",
+        message: "Нужен chatId и либо текст запроса, либо прикреплённый референс-ролик.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const storedUserContent = promptTrim || SCRIPT_PROMPT_REF_ONLY;
 
   const importCount = await prisma.scriptMessage.count({
     where: { chatId, role: "system", savedVideoId: { not: null } },
@@ -51,7 +77,8 @@ export async function POST(req: Request) {
     userId,
     meta: safeMeta({
       chatId,
-      userPromptChars: prompt.length,
+      userPromptChars: promptTrim.length,
+      referencesCount: refCount,
       importedVideosCount: importCount,
       cost,
     }),
@@ -94,7 +121,7 @@ export async function POST(req: Request) {
 
   try {
     await prisma.scriptMessage.create({
-      data: { chatId, role: "user", content: prompt },
+      data: { chatId, role: "user", content: storedUserContent },
     });
   } catch (e) {
     await creditTokens(userId, cost, "script_generate_refund", { sessionId: sessionKey });
@@ -120,7 +147,7 @@ export async function POST(req: Request) {
     orderBy: { createdAt: "asc" },
   });
 
-  const dsMessages = buildDeepSeekMessages(profile, allMessages);
+  const dsMessages = buildDeepSeekMessages(profile, allMessages, referencesPrompt);
   const systemChars = dsMessages[0]?.role === "system" ? dsMessages[0].content.length : 0;
   const historyUsed = dsMessages.length - 1;
 
@@ -143,6 +170,7 @@ export async function POST(req: Request) {
         errorKind: kind,
         httpStatus: status,
         durationMs: Date.now() - started,
+        referencesCount: refCount,
       }),
     });
     const msg =
@@ -167,9 +195,10 @@ export async function POST(req: Request) {
       cost,
       model,
       balanceAfter: spend.balance,
-      inputCharsApprox: prompt.length + systemChars,
+      inputCharsApprox: promptTrim.length + systemChars,
       historyMessagesUsed: historyUsed,
       importedVideosCount: importCount,
+      referencesCount: refCount,
       durationMs: Date.now() - started,
     }),
   });
@@ -181,7 +210,11 @@ export async function POST(req: Request) {
     });
     const nextTitle =
       assistantBefore === 0 && (chat.title === "Новый чат" || chat.title.trim() === "Новый чат")
-        ? `${prompt.slice(0, 40)}${prompt.length > 40 ? "…" : ""}`
+        ? promptTrim
+          ? `${promptTrim.slice(0, 40)}${promptTrim.length > 40 ? "…" : ""}`
+          : refRows[0]?.title
+            ? `Сценарий: ${refRows[0].title.slice(0, 36)}${refRows[0].title.length > 36 ? "…" : ""}`
+            : "Новый чат"
         : chat.title;
     await prisma.scriptChat.update({
       where: { id: chatId },
@@ -231,13 +264,14 @@ export async function POST(req: Request) {
       importedVideosCount: importCount,
       cost,
       balanceAfter: balance,
-      inputCharsApprox: prompt.length + systemChars,
+      inputCharsApprox: promptTrim.length + systemChars,
       historyMessagesUsed: historyUsed,
+      referencesCount: refCount,
     }),
   });
 
   return NextResponse.json({
-    userMessage: { role: "user", content: prompt },
+    userMessage: { role: "user", content: storedUserContent },
     assistantMessage: {
       id: assistantRow.id,
       role: assistantRow.role,
@@ -247,7 +281,11 @@ export async function POST(req: Request) {
     },
     chatTitle:
       assistantBefore === 0 && (chat.title === "Новый чат" || chat.title.trim() === "Новый чат")
-        ? `${prompt.slice(0, 40)}${prompt.length > 40 ? "…" : ""}`
+        ? promptTrim
+          ? `${promptTrim.slice(0, 40)}${promptTrim.length > 40 ? "…" : ""}`
+          : refRows[0]?.title
+            ? `Сценарий: ${refRows[0].title.slice(0, 36)}${refRows[0].title.length > 36 ? "…" : ""}`
+            : "Новый чат"
         : chat.title,
     balance,
   });

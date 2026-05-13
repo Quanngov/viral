@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ensureSessionUser } from "@/lib/token-wallet";
 import { getScriptGenerationTokenCost } from "@/lib/script-generator-config";
+import { serializeScriptChatReference } from "@/lib/script-chat-reference";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,17 @@ export async function GET(_req: Request, ctx: RouteCtx) {
     where: { id: chatId, userId },
     include: {
       messages: { orderBy: { createdAt: "asc" } },
+      references: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          video: {
+            select: {
+              transcriptText: true,
+              transcriptSource: true,
+            },
+          },
+        },
+      },
     },
   });
   if (!chat) {
@@ -28,6 +40,9 @@ export async function GET(_req: Request, ctx: RouteCtx) {
       savedVideoId: m.savedVideoId,
       createdAt: m.createdAt,
     })),
+    references: chat.references
+      .slice(0, 1)
+      .map((r) => serializeScriptChatReference(r, r.video)),
     tokenCost: getScriptGenerationTokenCost(),
   });
 }

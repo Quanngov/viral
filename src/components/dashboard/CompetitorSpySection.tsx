@@ -84,6 +84,7 @@ function adaptCompetitorVideoToGridVideo(
 
   return {
     id,
+    competitorVideoDbId: video.id,
     platform: plat,
     externalId: ext,
     youtubeId: plat === "youtube" ? ext : null,
@@ -102,6 +103,7 @@ function adaptCompetitorVideoToGridVideo(
     viralLabel: video.score >= 85 ? "High Viral" : video.score >= 65 ? "Rising" : "Stable",
     thumbnailUrl: video.thumbnailUrl ?? "https://picsum.photos/seed/competitor-fallback/540/720",
     url: video.url,
+    videoUrl: video.videoUrl ?? null,
     comments: video.comments,
     viewsPerHour: video.viewsPerHour ?? 0,
     engagementRate: video.engagementRate ?? 0,

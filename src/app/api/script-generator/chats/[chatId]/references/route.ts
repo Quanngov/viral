@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ensureSessionUser } from "@/lib/token-wallet";
 import { getScriptGenerationTokenCost } from "@/lib/script-generator-config";
+import type { ResolveVideoForTranscriptionInput } from "@/lib/resolve-video-for-transcription";
 import { attachScriptVideoReference, serializeScriptChatReference } from "@/lib/script-chat-reference";
 
 export const dynamic = "force-dynamic";
@@ -12,28 +13,33 @@ export async function POST(req: Request, ctx: RouteCtx) {
   const { userId } = await ensureSessionUser();
   const { chatId } = await ctx.params;
 
-  const chat = await prisma.scriptChat.findFirst({
-    where: { id: chatId, userId },
-    select: { id: true },
-  });
-  if (!chat) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-
   let body: unknown;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "bad_json" }, { status: 400 });
   }
-  const raw = body as Record<string, unknown>;
-  const sid = raw.savedVideoId;
-  const savedVideoId = typeof sid === "string" ? sid.trim() : "";
-  if (!savedVideoId) {
-    return NextResponse.json({ error: "bad_request", message: "Нужен savedVideoId" }, { status: 400 });
+  const o = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const input: ResolveVideoForTranscriptionInput = {
+    competitorVideoId: typeof o.competitorVideoId === "string" ? o.competitorVideoId : undefined,
+    savedVideoId: typeof o.savedVideoId === "string" ? o.savedVideoId : undefined,
+    videoId: typeof o.videoId === "string" ? o.videoId : undefined,
+    platform: typeof o.platform === "string" ? o.platform : undefined,
+    externalId: typeof o.externalId === "string" ? o.externalId : undefined,
+  };
+  const has =
+    Boolean(input.competitorVideoId?.trim()) ||
+    Boolean(input.savedVideoId?.trim()) ||
+    Boolean(input.videoId?.trim()) ||
+    (Boolean(input.platform?.trim()) && Boolean(input.externalId?.trim()));
+  if (!has) {
+    return NextResponse.json(
+      { error: "bad_request", message: "Передайте videoId, savedVideoId, competitorVideoId либо platform+externalId." },
+      { status: 400 },
+    );
   }
 
-  const r = await attachScriptVideoReference(chatId, userId, { savedVideoId });
+  const r = await attachScriptVideoReference(chatId, userId, input);
   if (!r.ok) {
     return NextResponse.json(
       {

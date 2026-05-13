@@ -48,6 +48,8 @@ export function videoToClientJson(v: Video) {
     viewsCount: v.views,
     likesCount: v.likes,
     durationSeconds: v.durationSeconds,
+    transcriptStatus: v.transcriptStatus ?? null,
+    transcriptSource: v.transcriptSource ?? null,
   };
 }
 

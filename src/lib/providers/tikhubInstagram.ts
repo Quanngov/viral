@@ -2,6 +2,10 @@ import { compactErrorMeta, logAdminEvent } from "@/lib/admin-events";
 
 const TIKHUB_SEARCH_URL = "https://api.tikhub.io/api/v1/instagram/v2/search_reels";
 const TIKHUB_USER_REELS_URL = "https://api.tikhub.io/api/v1/instagram/v2/fetch_user_reels";
+const TIKHUB_POST_BY_CODE_V3 = "https://api.tikhub.io/api/v1/instagram/v3/get_post_info_by_code";
+const TIKHUB_POST_INFO_V2 = "https://api.tikhub.io/api/v1/instagram/v2/fetch_post_info";
+/** Обновление одного ролика перед транскрибацией. */
+const TIMEOUT_MS_INSTAGRAM_SINGLE_POST = 18_000;
 /** Таймаут для поиска Reels по ключевому слову (короткий). */
 export const TIMEOUT_MS_INSTAGRAM_SEARCH = 14_000;
 /** Таймаут для fetch_user_reels при конкурентах (длиннее). */
@@ -255,6 +259,127 @@ function num(v: unknown, fallback = 0): number {
   return fallback;
 }
 
+function pickVideoUrlFromItem(item: Record<string, unknown>): string | null {
+  const direct = str(item.video_url);
+  if (direct) return direct;
+  const versions = item.video_versions as unknown[] | undefined;
+  if (!Array.isArray(versions)) return null;
+  for (const v of versions) {
+    if (!v || typeof v !== "object") continue;
+    const u = str((v as Record<string, unknown>).url);
+    if (u) return u;
+  }
+  return null;
+}
+
+function compactTranslatedSubtitles(item: Record<string, unknown>): unknown {
+  const raw = item.translated_video_subtitles;
+  if (Array.isArray(raw) && raw.length > 0) {
+    const filtered = raw
+      .slice(0, 2)
+      .map((x) => {
+        if (!x || typeof x !== "object") return null;
+        const o = x as Record<string, unknown>;
+        const uri = str(o.uri) ?? str(o.url) ?? str(o.subtitle_uri);
+        if (!uri) return null;
+        return {
+          uri,
+          locale: str(o.locale) ?? str(o.language) ?? undefined,
+        };
+      })
+      .filter((x) => x != null) as { uri: string; locale?: string }[];
+    return filtered.length ? filtered : undefined;
+  }
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    const uri = str(o.uri) ?? str(o.url);
+    if (uri) return [{ uri, locale: str(o.locale) ?? undefined }];
+  }
+  return undefined;
+}
+
+/** Найти объект медиа в ответе TikHub (список или вложенный data). */
+function findInstagramMediaItem(json: unknown): Record<string, unknown> | null {
+  const fromList = pickItems(json);
+  if (fromList[0] && typeof fromList[0] === "object") {
+    const row = fromList[0] as Record<string, unknown>;
+    if (row.video_versions || row.video_url || row.code) return row;
+  }
+  function walk(o: unknown, depth: number): Record<string, unknown> | null {
+    if (depth > 14 || !o || typeof o !== "object") return null;
+    if (Array.isArray(o)) {
+      for (const el of o) {
+        const r = walk(el, depth + 1);
+        if (r) return r;
+      }
+      return null;
+    }
+    const r = o as Record<string, unknown>;
+    const hasMedia =
+      (Array.isArray(r.video_versions) && r.video_versions.length > 0) || typeof r.video_url === "string";
+    const hasId = typeof r.code === "string" || typeof r.shortcode === "string" || typeof r.id === "string";
+    if (hasMedia && hasId) return r;
+    for (const v of Object.values(r)) {
+      const x = walk(v, depth + 1);
+      if (x) return x;
+    }
+    return null;
+  }
+  return walk(json, 0);
+}
+
+/**
+ * Подтянуть один Instagram Reel по shortcode или permalink (TikHub v3 → v2).
+ * Не логирует полные URL ответа.
+ */
+export async function fetchInstagramReelByCodeFromTikHub(
+  shortcode: string | null | undefined,
+  reelUrlFallback?: string | null,
+): Promise<NormalizedInstagramReel | null> {
+  const token = process.env.TIKHUB_TOKEN?.trim();
+  if (!token) return null;
+  const clean = shortcode?.trim() ?? "";
+
+  const tryFetch = async (requestUrl: string): Promise<NormalizedInstagramReel | null> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS_INSTAGRAM_SINGLE_POST);
+    try {
+      const res = await fetch(requestUrl, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      let json: unknown;
+      try {
+        json = await res.json();
+      } catch {
+        return null;
+      }
+      const item = findInstagramMediaItem(json);
+      if (!item) return null;
+      return parseItem(item);
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  if (clean) {
+    const v3Url = `${TIKHUB_POST_BY_CODE_V3}?code=${encodeURIComponent(clean)}`;
+    const fromV3 = await tryFetch(v3Url);
+    if (fromV3) return fromV3;
+  }
+
+  const permalink =
+    reelUrlFallback?.trim() ||
+    (clean ? `https://www.instagram.com/reel/${clean}/` : "");
+  if (!permalink) return null;
+  const v2Url = `${TIKHUB_POST_INFO_V2}?code_or_url=${encodeURIComponent(permalink)}`;
+  return await tryFetch(v2Url);
+}
+
 function parseItem(item: Record<string, unknown>): NormalizedInstagramReel | null {
   const code = str(item.code);
   const idRaw = str(item.id);
@@ -285,13 +410,7 @@ function parseItem(item: Record<string, unknown>): NormalizedInstagramReel | nul
       return str(first?.url);
     })();
 
-  const videoUrl =
-    str(item.video_url) ??
-    (() => {
-      const versions = item.video_versions as unknown[] | undefined;
-      const first = versions?.[0] as Record<string, unknown> | undefined;
-      return str(first?.url);
-    })();
+  const videoUrl = pickVideoUrlFromItem(item);
 
   const takenAt = num(item.taken_at, NaN);
   const takenDateStr = str(item.taken_at_date);
@@ -335,10 +454,34 @@ function parseItem(item: Record<string, unknown>): NormalizedInstagramReel | nul
     return Number.isFinite(f) && f > 0 ? Math.round(f) : null;
   })();
 
+  const vv = item.video_versions as unknown[] | undefined;
+  const videoVersionsCompact =
+    Array.isArray(vv) && vv.length > 0
+      ? vv
+          .slice(0, 2)
+          .map((x) => {
+            if (!x || typeof x !== "object") return null;
+            const u = str((x as Record<string, unknown>).url);
+            return u ? { url: u } : null;
+          })
+          .filter((x): x is { url: string } => Boolean(x))
+      : undefined;
+
+  const translatedCompact = compactTranslatedSubtitles(item);
+
   const usefulRaw = JSON.stringify({
     code: externalId,
-    pk: idRaw,
-    hasVideo: Boolean(videoUrl),
+    video_url: str(item.video_url) || undefined,
+    video_versions: videoVersionsCompact && videoVersionsCompact.length > 0 ? videoVersionsCompact : undefined,
+    video_subtitles_uri: subtitlesUrl || undefined,
+    translated_video_subtitles: translatedCompact,
+    thumbnail_url: thumb || undefined,
+    video_duration: durationSeconds,
+    play_count: views,
+    like_count: likes,
+    comment_count: comments,
+    share_count: shares,
+    taken_at: Number.isFinite(takenAt) ? takenAt : undefined,
   });
 
   return {
@@ -463,3 +606,5 @@ export async function searchInstagramReelsTikHub(keyword: string): Promise<TikHu
     clearTimeout(timer);
   }
 }
+
+export { parseItem as normalizeInstagramReelFromTikHubItem };

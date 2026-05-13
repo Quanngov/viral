@@ -1,10 +1,12 @@
 "use client";
 
-import { ArrowUp, ChevronDown, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { ScriptAssistantMarkdown } from "@/components/dashboard/script-generator/ScriptAssistantMarkdown";
 import { formatViewsCount } from "@/lib/format-video";
+import { SCRIPT_REF_DUPLICATE_MESSAGE, SCRIPT_REF_LIMIT_MESSAGE } from "@/lib/script-chat-reference";
+import { SCRIPT_PROMPT_REF_ONLY } from "@/lib/script-generator-prompt";
 
 type ChatSummary = { id: string; title: string; updatedAt: string; createdAt: string };
 
@@ -14,6 +16,24 @@ type Msg = {
   content: string;
   savedVideoId: string | null;
   createdAt: string;
+};
+
+type RefRow = {
+  id: string;
+  platform: string;
+  externalId: string;
+  title: string;
+  thumbnailUrl: string | null;
+  videoUrl: string | null;
+  url: string;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  views: number;
+  rating: number;
+  durationSeconds: number | null;
+  hasTranscript: boolean;
+  transcriptSource: string | null;
+  transcriptText: string | null;
 };
 
 type ApiProfile = {
@@ -60,6 +80,58 @@ function mergeProfileForEditor(p: ApiProfile): string {
 /** Отображаемая стоимость; совпадает с дефолтом `getScriptGenerationTokenCost` на сервере (20). */
 const SCRIPT_GENERATION_UI_COST = 20;
 
+function ScriptReferenceCard({ item }: { item: RefRow }) {
+  const pf = platformUi(item.platform);
+  const author = item.authorDisplayName?.trim() || item.authorUsername?.trim() || "—";
+  return (
+    <div className="script-msg-enter w-full max-w-[95%] self-start rounded-2xl border border-emerald-100/90 bg-gradient-to-br from-white to-emerald-50/35 p-3 shadow-sm ring-1 ring-zinc-100">
+      <div className="flex gap-3">
+        <div className="relative h-[4.5rem] w-[4rem] shrink-0 overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200/80">
+          {item.thumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-[10px] text-zinc-400">Нет превью</div>
+          )}
+          <span className="pointer-events-none absolute -bottom-0.5 -left-0.5 z-10 drop-shadow">
+            <PlatformIcon platform={pf} size={20} className="block" />
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Референс добавлен</p>
+          <p className="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug text-zinc-900">{item.title}</p>
+          <p className="mt-1 text-xs text-zinc-600">
+            <span className="font-medium text-zinc-800">{author}</span>
+            <span className="text-zinc-500"> · {formatViewsCount(item.views)} просмотров</span>
+            <span className="text-zinc-500"> · оценка {item.rating}</span>
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-900 shadow-sm transition-colors hover:bg-emerald-50"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              Открыть ролик
+            </a>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 rounded-xl border border-zinc-100 bg-white/70 p-2.5 shadow-inner shadow-zinc-900/[0.02]">
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Текст ролика</p>
+        <div className="scrollbar-hidden max-h-[9rem] min-h-[2.75rem] overflow-y-auto rounded-lg border border-zinc-100/90 bg-zinc-50/95 px-2.5 py-2 text-xs leading-relaxed text-zinc-800">
+          {item.transcriptText?.trim() ? (
+            <p className="whitespace-pre-wrap break-words">{item.transcriptText}</p>
+          ) : (
+            <p className="text-zinc-500">Текст ролика пока не получен</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TokenSpark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -78,11 +150,13 @@ export function ScriptGeneratorSection() {
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
+  const [references, setReferences] = useState<RefRow[]>([]);
   const [profileText, setProfileText] = useState("");
   const [savedVideos, setSavedVideos] = useState<SavedRow[]>([]);
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [profileSaved, setProfileSaved] = useState<"idle" | "saving" | "saved" | "err">("idle");
   const [importingId, setImportingId] = useState<string | null>(null);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
@@ -91,11 +165,33 @@ export function ScriptGeneratorSection() {
   const profileSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [profileReady, setProfileReady] = useState(false);
   const chatMenuRef = useRef<HTMLDivElement>(null);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+
+  const CHAT_BOTTOM_THRESHOLD_PX = 72;
+
+  const updateScrollDownVisibility = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      setShowScrollDown(false);
+      return;
+    }
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distance <= CHAT_BOTTOM_THRESHOLD_PX;
+    const hasOverflow = el.scrollHeight > el.clientHeight + 8;
+    setShowScrollDown(hasOverflow && !atBottom);
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
+    queueMicrotask(updateScrollDownVisibility);
+  }, [updateScrollDownVisibility]);
+
+  const scrollChatToBottomSmooth = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, []);
 
   const loadSaved = useCallback(async () => {
@@ -132,8 +228,9 @@ export function ScriptGeneratorSection() {
         setError("Не удалось загрузить чат");
         return;
       }
-      const data = (await res.json()) as { messages?: Msg[] };
+      const data = (await res.json()) as { messages?: Msg[]; references?: RefRow[] };
       setMessages(data.messages ?? []);
+      setReferences(data.references ?? []);
       requestAnimationFrame(scrollToBottom);
     },
     [scrollToBottom],
@@ -154,7 +251,22 @@ export function ScriptGeneratorSection() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+    const id = requestAnimationFrame(() => updateScrollDownVisibility());
+    return () => cancelAnimationFrame(id);
+  }, [messages, references, generating, scrollToBottom, updateScrollDownVisibility]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollDownVisibility();
+    el.addEventListener("scroll", updateScrollDownVisibility, { passive: true });
+    const ro = new ResizeObserver(() => updateScrollDownVisibility());
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateScrollDownVisibility);
+      ro.disconnect();
+    };
+  }, [updateScrollDownVisibility, selectedChatId, messages, references, generating, notice, error]);
 
   useEffect(() => {
     if (!chatMenuOpen) return;
@@ -166,6 +278,78 @@ export function ScriptGeneratorSection() {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [chatMenuOpen]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 4200);
+    return () => window.clearTimeout(t);
+  }, [notice]);
+
+  useEffect(() => {
+    const processIntent = async () => {
+      let raw: string | null = null;
+      try {
+        raw = sessionStorage.getItem("viral_script_reference_intent");
+      } catch {
+        return;
+      }
+      if (!raw?.trim()) return;
+      try {
+        sessionStorage.removeItem("viral_script_reference_intent");
+        const payload = JSON.parse(raw) as {
+          title?: string;
+          videoId?: string;
+          savedVideoId?: string;
+          competitorVideoId?: string;
+        };
+        const title =
+          typeof payload.title === "string" && payload.title.trim()
+            ? payload.title.trim().slice(0, 120)
+            : "Новый чат";
+        const body: Record<string, string> = { title };
+        if (payload.savedVideoId) body.savedVideoId = payload.savedVideoId;
+        else if (payload.competitorVideoId) body.competitorVideoId = payload.competitorVideoId;
+        else if (payload.videoId) body.videoId = payload.videoId;
+        else return;
+
+        setError(null);
+        setNotice(null);
+        const res = await fetch("/api/script-generator/chats/with-reference", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json()) as {
+          error?: string;
+          code?: string;
+          message?: string;
+          chat?: ChatSummary;
+          duplicate?: boolean;
+        };
+        if (!res.ok || !data.chat) {
+          setError(typeof data.message === "string" ? data.message : "Не удалось создать чат с референсом");
+          return;
+        }
+        setChats((prev) => [data.chat!, ...prev]);
+        setSelectedChatId(data.chat.id);
+        setPrompt("");
+        if (data.duplicate) {
+          setNotice(SCRIPT_REF_DUPLICATE_MESSAGE);
+        }
+        await loadChatMessages(data.chat.id);
+        await loadChats();
+      } catch {
+        setError("Не удалось обработать переход из ролика");
+      }
+    };
+
+    void processIntent();
+    const onIntent = () => {
+      void processIntent();
+    };
+    window.addEventListener("viral-script-reference-intent", onIntent);
+    return () => window.removeEventListener("viral-script-reference-intent", onIntent);
+  }, [loadChatMessages, loadChats]);
 
   const persistProfile = useCallback(async (text: string) => {
     setProfileSaved("saving");
@@ -195,6 +379,7 @@ export function ScriptGeneratorSection() {
 
   const onNewChat = useCallback(async () => {
     setError(null);
+    setNotice(null);
     setChatMenuOpen(false);
     const res = await fetch("/api/script-generator/chats", {
       method: "POST",
@@ -215,51 +400,79 @@ export function ScriptGeneratorSection() {
   const onSelectChat = useCallback((id: string) => {
     if (!id) return;
     setError(null);
+    setNotice(null);
     setSelectedChatId(id);
     setPrompt("");
     setChatMenuOpen(false);
   }, []);
 
+  const ensureChatId = useCallback(async (): Promise<string | null> => {
+    if (selectedChatId) return selectedChatId;
+    const res = await fetch("/api/script-generator/chats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Новый чат" }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { chat?: ChatSummary };
+    if (!data.chat) return null;
+    setChats((prev) => [data.chat!, ...prev]);
+    setSelectedChatId(data.chat.id);
+    setPrompt("");
+    return data.chat.id;
+  }, [selectedChatId]);
+
   const onImport = useCallback(
     async (savedVideoId: string) => {
-      if (!selectedChatId) {
-        setError("Сначала выберите или создайте чат");
-        return;
-      }
       setImportingId(savedVideoId);
       setError(null);
+      setNotice(null);
       try {
-        const res = await fetch(
-          `/api/script-generator/chats/${encodeURIComponent(selectedChatId)}/import-video`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ savedVideoId }),
-          },
-        );
-        const data = (await res.json()) as {
-          error?: string;
-          message?: { id: string; role: string; content: string; savedVideoId: string | null; createdAt: string };
-        };
-        if (!res.ok) {
-          setError(typeof data.error === "string" ? data.error : "Не удалось добавить ролик");
+        const chatId = await ensureChatId();
+        if (!chatId) {
+          setError("Не удалось создать чат");
           return;
         }
-        if (data.message) {
-          setMessages((m) => [...m, data.message!]);
+        const res = await fetch(`/api/script-generator/chats/${encodeURIComponent(chatId)}/import-video`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ savedVideoId }),
+        });
+        const data = (await res.json()) as {
+          error?: string;
+          code?: string;
+          message?: string;
+          duplicate?: boolean;
+          reference?: RefRow;
+        };
+        if (!res.ok) {
+          if (res.status === 409 && data.code === "ref_limit") {
+            setNotice(typeof data.message === "string" ? data.message : SCRIPT_REF_LIMIT_MESSAGE);
+            return;
+          }
+          setError(typeof data.message === "string" ? data.message : "Не удалось добавить ролик");
+          return;
         }
+        if (data.duplicate) {
+          setNotice(SCRIPT_REF_DUPLICATE_MESSAGE);
+          await loadChatMessages(chatId);
+          return;
+        }
+        await loadChatMessages(chatId);
         void loadChats();
       } finally {
         setImportingId(null);
       }
     },
-    [selectedChatId, loadChats],
+    [ensureChatId, loadChatMessages, loadChats],
   );
 
   const onGenerate = useCallback(async () => {
-    if (!selectedChatId || !prompt.trim() || generating) return;
+    if (!selectedChatId || generating) return;
+    if (!prompt.trim() && references.length === 0) return;
     setGenerating(true);
     setError(null);
+    setNotice(null);
     try {
       const res = await fetch("/api/script-generator/generate", {
         method: "POST",
@@ -284,7 +497,7 @@ export function ScriptGeneratorSection() {
     } finally {
       setGenerating(false);
     }
-  }, [selectedChatId, prompt, generating, loadChatMessages, loadChats]);
+  }, [selectedChatId, prompt, generating, references.length, loadChatMessages, loadChats]);
 
   useEffect(() => {
     if (selectedChatId) return;
@@ -299,7 +512,13 @@ export function ScriptGeneratorSection() {
     return chats.find((c) => c.id === selectedChatId)?.title ?? "Чат";
   }, [chats, selectedChatId]);
 
-  const hasMessages = messages.length > 0;
+  const hasUserAssistant = useMemo(
+    () => messages.some((m) => m.role === "user" || m.role === "assistant"),
+    [messages],
+  );
+
+  const showDefaultEmpty = references.length === 0 && !hasUserAssistant && !generating;
+  const showReferenceOnlyHint = references.length > 0 && !hasUserAssistant && !generating;
 
   const PROFILE_PLACEHOLDER =
     "Например: я занимаюсь видеопродакшеном для экспертов и бизнеса. Помогаю через Reels/Shorts привлекать клиентов. В конце ролика обычно призываю написать мне в Telegram. Стиль — уверенный, живой, без канцелярита. Нельзя обещать гарантированный результат.";
@@ -358,20 +577,31 @@ export function ScriptGeneratorSection() {
             ) : null}
           </div>
 
-          <div
-            ref={scrollRef}
-            className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain pr-0.5 [scrollbar-width:thin]"
-          >
+          <div className="relative mt-3 flex min-h-0 flex-1 flex-col">
+            <div
+              ref={scrollRef}
+              className="scrollbar-hidden flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain pr-0.5"
+            >
+            {references.map((r) => (
+              <ScriptReferenceCard key={r.id} item={r} />
+            ))}
+
+            {notice ? (
+              <div className="script-msg-enter rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
+                {notice}
+              </div>
+            ) : null}
+
             {error ? (
               <div className="script-msg-enter rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
                 {error}
               </div>
             ) : null}
 
-            {!hasMessages && !generating ? (
+            {showDefaultEmpty ? (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-4 py-8 text-center">
                 <p className="max-w-md text-sm leading-relaxed text-zinc-500">
-                  Напишите, про что нужен сценарий. Справа можно добавить информацию о себе и выбрать референс из сохраненных
+                  Напишите, про что нужен сценарий. Справа можно добавить информацию о себе и выбрать референс из сохранённых
                   роликов.
                 </p>
                 <button
@@ -382,16 +612,24 @@ export function ScriptGeneratorSection() {
                   Новый чат
                 </button>
               </div>
-            ) : hasMessages ? (
-              messages.map((m) => {
+            ) : null}
+
+            {showReferenceOnlyHint ? (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 text-center text-sm leading-relaxed text-emerald-950">
+                Референс добавлен. Напишите, какой сценарий хотите получить на основе этого ролика.
+              </div>
+            ) : null}
+
+            {hasUserAssistant
+              ? messages.map((m) => {
                   if (m.role === "system" && m.savedVideoId) {
                     return (
                       <div
                         key={m.id}
                         className="script-msg-enter self-start max-w-[95%] min-w-0 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs leading-relaxed text-amber-950"
                       >
-                        <p className="font-semibold text-amber-900/90">Ролик из сохранённых</p>
-                        <p className="mt-1 whitespace-pre-wrap break-words text-amber-950/90">{m.content}</p>
+                        <p className="font-semibold text-amber-900/90">Ролик из сохранённых (старый импорт)</p>
+                        <p className="mt-1 line-clamp-6 whitespace-pre-wrap break-words text-amber-950/90">{m.content}</p>
                       </div>
                     );
                   }
@@ -406,12 +644,20 @@ export function ScriptGeneratorSection() {
                     );
                   }
                   if (m.role === "user") {
+                    const isRefOnly = m.content === SCRIPT_PROMPT_REF_ONLY;
                     return (
                       <div
                         key={m.id}
                         className="script-msg-enter self-end max-w-[95%] min-w-0 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm leading-relaxed text-zinc-900"
                       >
-                        <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                        {isRefOnly ? (
+                          <p className="text-sm text-emerald-950">
+                            <span className="font-semibold">Запрос по референсу</span>
+                            <span className="text-zinc-600"> — отдельного текста в поле ввода не было.</span>
+                          </p>
+                        ) : (
+                          <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                        )}
                       </div>
                     );
                   }
@@ -421,11 +667,13 @@ export function ScriptGeneratorSection() {
                     </div>
                   );
                 })
-            ) : null}
+              : null}
 
             {generating ? (
               <div
-                className={`flex shrink-0 ${!hasMessages ? "min-h-0 flex-1 flex-col items-center justify-center py-8" : ""}`}
+                className={`flex shrink-0 ${
+                  !hasUserAssistant && references.length === 0 ? "min-h-0 flex-1 flex-col items-center justify-center py-8" : ""
+                }`}
               >
                 <div
                   className="script-msg-enter flex items-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/95 px-3 py-2.5 text-zinc-600 shadow-sm"
@@ -440,13 +688,27 @@ export function ScriptGeneratorSection() {
                 </div>
               </div>
             ) : null}
+            </div>
+            {showScrollDown ? (
+              <button
+                type="button"
+                onClick={() => scrollChatToBottomSmooth()}
+                className="absolute bottom-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200/90 bg-white/95 text-zinc-600 shadow-md shadow-zinc-900/12 transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-900"
+                aria-label="Прокрутить к концу чата"
+              >
+                <ArrowDown className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+              </button>
+            ) : null}
           </div>
 
           <div className="mt-3 shrink-0 border-t border-zinc-100 pt-3">
             <div className="flex items-end gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/90 p-2 shadow-sm shadow-zinc-900/5">
               <textarea
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={(e) => {
+                  setNotice(null);
+                  setPrompt(e.target.value);
+                }}
                 rows={1}
                 placeholder="Промпт для сценария…"
                 disabled={!selectedChatId || generating}
@@ -462,7 +724,7 @@ export function ScriptGeneratorSection() {
                 </div>
                 <button
                   type="button"
-                  disabled={!selectedChatId || !prompt.trim() || generating}
+                  disabled={!selectedChatId || generating || (!prompt.trim() && references.length === 0)}
                   onClick={() => void onGenerate()}
                   aria-label="Сгенерировать сценарий"
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-600/25 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
@@ -506,7 +768,7 @@ export function ScriptGeneratorSection() {
 
           <section className="flex min-h-[280px] flex-1 flex-col rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-sm shadow-zinc-900/5 lg:flex-[2]">
             <h2 className="mb-3 shrink-0 text-sm font-semibold text-zinc-900">Сохранённые ролики</h2>
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
+            <div className="scrollbar-hidden min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5">
               {savedVideos.length === 0 ? (
                 <p className="text-sm text-zinc-500">Пока нет сохранённых роликов</p>
               ) : (
@@ -541,7 +803,7 @@ export function ScriptGeneratorSection() {
                     <div className="flex shrink-0 items-center self-stretch">
                       <button
                         type="button"
-                        disabled={!selectedChatId || importingId === v.id}
+                        disabled={importingId === v.id}
                         onClick={() => void onImport(v.id)}
                         className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-900 disabled:opacity-40"
                       >
