@@ -291,6 +291,8 @@ function AdminVideosInner() {
           </section>
         ) : null}
 
+        <TrendsQueueSection />
+
         <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Всего роликов" highlight value={stats ? stats.totalVideos : "—"} />
           <StatCard label="YouTube" value={stats ? stats.youtubeCount : "—"} />
@@ -672,6 +674,162 @@ function DetailRow({ k, v, link, mono }: { k: string; v: string; link?: boolean;
         )}
       </dd>
     </div>
+  );
+}
+
+type TrendItem = {
+  id: string;
+  videoId: string;
+  status: string;
+  trendScore: number;
+  reason: string | null;
+  source: string | null;
+  detectedAt: string;
+  releaseAt: string | null;
+  publishedAt: string | null;
+  video: {
+    title: string;
+    platform: string;
+    authorUsername: string | null;
+    views: number;
+    rating: number;
+    publishedAt: string;
+  };
+};
+
+function TrendsQueueSection() {
+  const [trends, setTrends] = useState<TrendItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>("all");
+
+  useEffect(() => {
+    async function loadTrends() {
+      try {
+        const response = await fetch("/api/admin/trends");
+        const data = await response.json();
+        if (Array.isArray(data.trends)) {
+          setTrends(data.trends);
+        }
+      } catch (error) {
+        console.error("Failed to load trends queue:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadTrends();
+  }, []);
+
+  const filteredTrends = useMemo(() => {
+    if (filter === "all") return trends;
+    return trends.filter(t => t.status === filter);
+  }, [trends, filter]);
+
+  const statusCounts = useMemo(() => {
+    const counts = { queued: 0, published: 0, archived: 0, rejected: 0 };
+    trends.forEach(t => {
+      if (t.status in counts) {
+        counts[t.status as keyof typeof counts]++;
+      }
+    });
+    return counts;
+  }, [trends]);
+
+  return (
+    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-900">Очередь трендов</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Кандидаты в тренды из детектора базы данных
+          </p>
+        </div>
+        <div className="flex gap-2 text-xs">
+          {Object.entries(statusCounts).map(([status, count]) => (
+            <button
+              key={status}
+              onClick={() => setFilter(filter === status ? "all" : status)}
+              className={`rounded px-2 py-1 font-medium ${
+                filter === status
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+              }`}
+            >
+              {status}: {count}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="mt-4 text-center text-xs text-zinc-400">Загрузка очереди трендов...</p>
+      ) : filteredTrends.length === 0 ? (
+        <p className="mt-4 text-center text-xs text-zinc-500">
+          {filter === "all" ? "Очередь пуста" : `Нет элементов со статусом "${filter}"`}
+        </p>
+      ) : (
+        <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-zinc-200 bg-zinc-50/90">
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Статус</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Балл</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Причина</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Платформа</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Заголовок</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Автор</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Просмотры</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Опубликован</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Выход в тренды</th>
+                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Обнаружен</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTrends.map(trend => (
+                  <tr key={trend.id} className="border-b border-zinc-100">
+                    <td className="px-2 py-2">
+                      <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                        trend.status === "queued" ? "bg-yellow-100 text-yellow-800" :
+                        trend.status === "published" ? "bg-green-100 text-green-800" :
+                        trend.status === "archived" ? "bg-gray-100 text-gray-800" :
+                        "bg-red-100 text-red-800"
+                      }`}>
+                        {trend.status}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 font-medium">{trend.trendScore}</td>
+                    <td className="px-2 py-2 max-w-[120px] truncate" title={trend.reason || ""}>
+                      {trend.reason || "—"}
+                    </td>
+                    <td className="px-2 py-2">
+                      <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                        trend.video.platform === "youtube" ? "bg-red-100 text-red-700" :
+                        "bg-purple-100 text-purple-700"
+                      }`}>
+                        {trend.video.platform}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 max-w-[200px] truncate font-medium" title={trend.video.title}>
+                      {trend.video.title}
+                    </td>
+                    <td className="px-2 py-2 max-w-[100px] truncate">
+                      {trend.video.authorUsername || "—"}
+                    </td>
+                    <td className="px-2 py-2">{trend.video.views.toLocaleString("ru-RU")}</td>
+                    <td className="px-2 py-2">{formatDt(trend.video.publishedAt)}</td>
+                    <td className="px-2 py-2">
+                      {trend.publishedAt ? formatDt(trend.publishedAt) : 
+                       trend.releaseAt ? formatDt(trend.releaseAt) : "—"}
+                    </td>
+                    <td className="px-2 py-2">{formatDt(trend.detectedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

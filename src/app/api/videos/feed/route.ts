@@ -15,6 +15,8 @@ import { ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/to
 import { videoToClientJson } from "@/lib/serialize-video";
 import { sortVideosList } from "@/lib/video-sort";
 import { videoClientId } from "@/lib/video-client-id";
+import { throttledDetectTrends } from "@/lib/trends/throttled-detector";
+import { canMakeExternalSearch, markExternalSearchMade } from "@/lib/search-throttle";
 import type { ApiSort, PeriodApi } from "@/lib/search-query";
 
 export const dynamic = "force-dynamic";
@@ -121,6 +123,34 @@ export async function POST(req: Request) {
   const { userId, sessionKey } = await ensureSessionUser();
   const cost = Math.min(100, Math.max(1, Number(body.tokenCost) || TOKEN_COST));
 
+  // Record search query log
+  if (q && q.length <= 120) {
+    const normalizedQuery = q.toLowerCase().replace(/\s+/g, " ").trim();
+    if (normalizedQuery) {
+      try {
+        await prisma.searchQueryLog.create({
+          data: {
+            userId,
+            query: q,
+            normalizedQuery,
+            action,
+            platform: body.platform || null,
+          },
+        });
+      } catch (e) {
+        // Log but don't fail the request
+        await logAdminEvent({
+          level: "warn",
+          type: "search_log_error",
+          message: "Failed to record search query log",
+          sessionId: sessionKey,
+          userId,
+          meta: safeMeta({ error: e instanceof Error ? e.message : String(e) }),
+        });
+      }
+    }
+  }
+
   const platform = parsePlatform(body.platform);
   const period = parsePeriod(body.period);
   const sort = parseSort(body.sort);
@@ -223,14 +253,26 @@ export async function POST(req: Request) {
   });
 
   const lowPool = round.unseenCount < THRESH_MORE;
-  const wantYt =
-    action === "more" && platform !== "instagram" && Boolean(process.env.YOUTUBE_API_KEY?.trim()) && lowPool;
-  const wantIg =
-    action === "more" &&
-    platform !== "youtube" &&
-    (lowPool || (platform === "all" && round.unseenInstagramInPool === 0));
+  const canExternalSearch = await canMakeExternalSearch(q);
+  
+  // Для action === "search": делаем внешний добор если мало роликов и можно по throttle
+  // Для action === "more": как раньше, только при lowPool и с токенами
+  const wantYt = Boolean(process.env.YOUTUBE_API_KEY?.trim()) && (
+    (action === "search" && platform !== "instagram" && round.picked.length < 8 && canExternalSearch) ||
+    (action === "more" && platform !== "instagram" && lowPool)
+  );
+  
+  const wantIg = (
+    (action === "search" && platform !== "youtube" && round.picked.length < 8 && canExternalSearch) ||
+    (action === "more" && platform !== "youtube" && (lowPool || (platform === "all" && round.unseenInstagramInPool === 0)))
+  );
 
-  if (action === "more" && (wantYt || wantIg)) {
+  if ((action === "search" || action === "more") && (wantYt || wantIg)) {
+    // Отмечаем внешний поиск для throttle (только для search)
+    if (action === "search") {
+      await markExternalSearchMade(q);
+    }
+
     await logAdminEvent({
       level: "info",
       type: "api_fetch",
@@ -306,13 +348,13 @@ export async function POST(req: Request) {
       batchIndex,
       mixSeed,
       now,
-      mixMode: "more",
+      mixMode: action === "more" ? "more" : "search",
     });
 
     await logAdminEvent({
       level: "info",
-      type: "feed_more",
-      message: "Кандидаты после добора",
+      type: action === "more" ? "feed_more" : "feed_search",
+      message: `Кандидаты после добора (${action})`,
       sessionId: sessionKey,
       userId,
       meta: safeMeta({
@@ -349,6 +391,19 @@ export async function POST(req: Request) {
   const totalCount = await prisma.video.count();
 
   const noMore = picked.length === 0 && action === "more";
+
+  // Устанавливаем userHint если мало роликов
+  if (action === "search" && picked.length < 4 && !feedUserHint) {
+    feedUserHint = "Найдено мало роликов. Попробуйте изменить запрос или фильтры";
+  }
+
+  // Запускаем детектор трендов в фоне если были добавлены новые ролики
+  if ((action === "search" || action === "more") && (wantYt || wantIg)) {
+    // Не ждем результат, запускаем в фоне
+    throttledDetectTrends(action === "search" ? "feed_search" : "feed_more").catch((error) => {
+      console.error("Background trend detection failed:", error);
+    });
+  }
 
   return NextResponse.json({
     tokensOk: true,

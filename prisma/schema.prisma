@@ -65,6 +65,7 @@ model Video {
   lastFetchedAt DateTime?
 
   scriptChatReferences ScriptChatReference[]
+  trendItems           TrendItem[]
 
   @@unique([platform, externalId])
   @@index([sourceQuery])
@@ -317,4 +318,46 @@ model AdminEvent {
   @@index([createdAt])
   @@index([level])
   @@index([type])
+}
+
+model TrendItem {
+  id              String   @id @default(cuid())
+  videoId         String
+  video           Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  status          String   @default("queued") // queued | published | archived | rejected
+  trendScore      Int      @default(0)
+  reason          String?
+  source          String?  // db_scan | lazy_discovery | feed_more | competitor_sync
+  metricsSnapshot Json?
+
+  detectedAt      DateTime @default(now())
+  releaseAt       DateTime?
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([videoId])
+  @@index([status, releaseAt])
+  @@index([trendScore])
+}
+
+model SearchQueryLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  query           String
+  normalizedQuery String
+  action          String?  // search | more
+  platform        String?
+  createdAt       DateTime @default(now())
+
+  @@index([normalizedQuery, createdAt])
+  @@index([createdAt])
+}
+
+model AppRuntimeState {
+  key       String   @id
+  value     Json?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }

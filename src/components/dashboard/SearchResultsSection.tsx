@@ -39,6 +39,11 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
   const [session, setSession] = useState<FeedSession | null>(null);
   const [noMore, setNoMore] = useState(false);
   const feedBatchIndexRef = useRef(1);
+  const [searchSteps, setSearchSteps] = useState<{
+    step1: "pending" | "active" | "completed";
+    step2: "pending" | "active" | "completed";
+    step3: "pending" | "active" | "completed";
+  }>({ step1: "pending", step2: "pending", step3: "pending" });
 
   const [filters, setFilters] = useState<SearchGridFilters>({
     languageMode: "world",
@@ -124,6 +129,19 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
     setError(null);
     setNoMore(false);
 
+    // Анимация поиска
+    setSearchSteps({ step1: "active", step2: "pending", step3: "pending" });
+    
+    // Шаг 1 завершается через 200ms
+    setTimeout(() => {
+      setSearchSteps({ step1: "completed", step2: "active", step3: "pending" });
+    }, 200);
+    
+    // Шаг 2 завершается через 1000ms (время на внешние API)
+    setTimeout(() => {
+      setSearchSteps({ step1: "completed", step2: "completed", step3: "active" });
+    }, 1000);
+
     try {
       const { region, language } = uiLocaleToApi(payload.locale);
       const period = uiPeriodToApi(payload.period);
@@ -167,6 +185,8 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
       setError(sanitizeClientErrorMessage(e instanceof Error ? e.message : ""));
     } finally {
       setLoading(false);
+      // Завершаем анимацию
+      setSearchSteps({ step1: "completed", step2: "completed", step3: "completed" });
     }
   }
 
@@ -260,7 +280,7 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-transparent p-4">
+    <div className="flex flex-col gap-3 rounded-2xl bg-transparent px-0 pb-4 pt-1">
       <SearchToolbar
         searchCost={searchCost}
         searching={loading}
@@ -276,6 +296,31 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
             Закрыть
           </button>
         </p>
+      ) : null}
+
+      {/* Анимация поиска */}
+      {loading && (searchSteps.step1 !== "pending" || searchSteps.step2 !== "pending" || searchSteps.step3 !== "pending") ? (
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+            <span className="text-sm font-medium text-zinc-800">Ищем ролики...</span>
+          </div>
+          
+          <div className="space-y-2">
+            <SearchStep
+              status={searchSteps.step1}
+              text="Проверяем базу"
+            />
+            <SearchStep
+              status={searchSteps.step2}
+              text="Добираем свежие ролики из YouTube и Instagram"
+            />
+            <SearchStep
+              status={searchSteps.step3}
+              text="Собираем выдачу"
+            />
+          </div>
+        </div>
       ) : null}
 
       {!boot && noMore && session && videos.length === 0 ? (
@@ -339,5 +384,29 @@ function LightningIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function SearchStep({ status, text }: { status: "pending" | "active" | "completed"; text: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+        status === "pending" ? "bg-zinc-300" :
+        status === "active" ? "bg-emerald-500 animate-pulse" :
+        "bg-emerald-600"
+      }`} />
+      <span className={`${
+        status === "pending" ? "text-zinc-500" :
+        status === "active" ? "text-zinc-800 font-medium" :
+        "text-zinc-700"
+      }`}>
+        {text}
+      </span>
+      {status === "completed" ? (
+        <svg className="h-3 w-3 text-emerald-600 ml-auto" fill="currentColor" viewBox="0 0 16 16">
+          <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+        </svg>
+      ) : null}
+    </div>
   );
 }

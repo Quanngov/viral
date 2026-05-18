@@ -94,10 +94,10 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
   const closeProfileMenu = () => setProfileMenuOpen(false);
 
   return (
-    <aside className="shrink-0 bg-transparent px-3 pb-3 pt-2">
-      <div className="flex flex-col rounded-xl bg-white p-3 shadow-sm shadow-zinc-900/5">
-        <p className="mb-2 truncate text-xs font-medium text-zinc-500">{user.email}</p>
-        <div className="flex items-start gap-2">
+    <aside className="shrink-0 bg-transparent px-3 pb-2 pt-0">
+      <div className="flex flex-col rounded-xl bg-white p-3 shadow-sm shadow-zinc-900/5 lg:flex-col">
+        <p className="mb-2 hidden truncate text-xs font-medium text-zinc-500 lg:block">{user.email}</p>
+        <div className="hidden items-start gap-2 lg:flex">
           <div className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm shadow-emerald-900/5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold tracking-tight text-emerald-900">{user.plan}</span>
@@ -127,7 +127,7 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
           </button>
         </div>
 
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 hidden grid-cols-2 gap-2 lg:grid">
           <button
             type="button"
             onClick={() => {
@@ -221,7 +221,8 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
           </div>
         </div>
 
-        <nav className="mt-2 flex flex-col gap-0 border-t border-zinc-100 pt-1.5">
+        {/* Desktop navigation */}
+        <nav className="mt-2 hidden flex-col gap-0 border-t border-zinc-100 pt-1.5 lg:flex">
           {tools.map((item) => (
             <button
               key={item.key}
@@ -248,7 +249,27 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
           ))}
         </nav>
 
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-zinc-100 pt-2">
+        {/* Mobile navigation - horizontal layout */}
+        <nav className="flex gap-1 lg:hidden">
+          {tools.filter(item => !item.soon).map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => item.view && onChangeView(item.view)}
+              className={`flex flex-1 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${
+                item.view === activeView
+                  ? "bg-emerald-100 text-emerald-900"
+                  : "text-zinc-700 hover:bg-emerald-50 hover:text-emerald-900"
+              }`}
+              aria-label={item.label}
+            >
+              <div className="h-4 w-4">{item.icon}</div>
+              <span className="truncate text-[10px]">{item.label.split(" ")[0]}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="mt-2 hidden items-center justify-between gap-2 border-t border-zinc-100 pt-2 lg:flex">
           <span className="truncate text-base font-semibold tracking-tight text-zinc-800">{SERVICE_NAME}</span>
           <button
             type="button"

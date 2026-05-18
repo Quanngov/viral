@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { compactErrorMeta, logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { prisma } from "@/lib/prisma";
+import { throttledDetectTrends } from "@/lib/trends/throttled-detector";
 import {
   COMPETITOR_DAILY_SYNC_TOKEN_COST,
   DAILY_SYNC_DEFAULT_VISIBLE_VIDEO_LIMIT,
@@ -547,6 +548,14 @@ export async function runCompetitorDailySync(
   }
 
   tokensRemaining = await getTokenBalanceForUser(userId);
+
+  // Запускаем детектор трендов в фоне если синхронизировались профили
+  if (profilesSynced > 0) {
+    throttledDetectTrends("competitor_sync").catch((error) => {
+      console.error("Background trend detection after competitor sync failed:", error);
+    });
+  }
+
   return {
     ok: true,
     tokensRemaining,

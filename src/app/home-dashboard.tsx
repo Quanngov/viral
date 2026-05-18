@@ -68,18 +68,32 @@ function HomeDashboardInner() {
     <ToastProvider>
       <SavedVideosProvider>
         <DashboardLayout>
-        <div className="sticky top-0 flex h-[100dvh] min-h-0 w-[25%] min-w-[272px] max-w-[380px] shrink-0 flex-col overflow-hidden bg-transparent">
-          <LiveTrendsSidebar onVideoClick={setSelectedVideo} />
-          <UserPanel user={mockUser} activeView={activeView} onChangeView={setActiveView} />
-        </div>
+          {/* Dashboard grid - левая sticky колонка + основной контент */}
+          <div className="grid grid-cols-[320px_minmax(0,1fr)] items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+            
+            {/* Левая sticky колонка */}
+            <aside className="z-20 hidden h-[calc(100dvh-16px)] flex-col gap-3 self-start overflow-hidden lg:sticky lg:top-2 lg:flex">
+              
+              {/* Карточка трендов */}
+              <section className="min-h-0 flex-1 overflow-hidden">
+                <LiveTrendsSidebar onVideoClick={setSelectedVideo} />
+              </section>
 
-        <div
-          className={`flex min-h-0 min-w-0 flex-1 flex-col bg-transparent pt-0 ${
-            activeView === "scripts"
-              ? "h-[100dvh] max-h-[100dvh] overflow-hidden pb-3 sm:pb-4"
-              : "pb-12"
-          }`}
-        >
+              {/* Карточка профиля/кнопок */}
+              <section className="shrink-0 overflow-visible">
+                <UserPanel user={mockUser} activeView={activeView} onChangeView={setActiveView} />
+              </section>
+
+            </aside>
+
+            {/* Основной контент */}
+            <main
+              className={`flex min-h-0 min-w-0 flex-1 flex-col bg-transparent ${
+                activeView === "scripts"
+                  ? "h-[100dvh] max-h-[100dvh] overflow-hidden pb-3 sm:pb-4"
+                  : "pb-12"
+              }`}
+            >
           {activeView === "home" ? (
             <>
               <WeeklyTrendsSection
@@ -87,7 +101,7 @@ function HomeDashboardInner() {
                 open={weeklyOpen}
                 onToggle={() => setWeeklyOpen((v) => !v)}
               />
-              <div className={`${weeklyOpen ? "mt-3" : "mt-1.5"} flex flex-col gap-3 px-6`}>
+              <div className="mt-0 flex flex-col gap-3 px-6">
                 <SearchResultsSection searchCost={5} onVideoClick={setSelectedVideo} />
               </div>
             </>
@@ -100,7 +114,16 @@ function HomeDashboardInner() {
               <ScriptsSection />
             </div>
           )}
-        </div>
+
+            </main>
+
+          </div>
+
+          {/* Мобильная навигация */}
+          <div className="border-t border-zinc-200 bg-white lg:hidden">
+            <UserPanel user={mockUser} activeView={activeView} onChangeView={setActiveView} />
+          </div>
+
         <VideoDetailPanel
           video={selectedVideo}
           activeView={activeView}
