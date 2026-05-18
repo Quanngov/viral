@@ -1,16 +1,10 @@
 "use client";
 
 import { FilePenLine } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { MockUser } from "@/lib/mock-data";
-import { DashboardAnchoredLayer } from "@/components/dashboard/DashboardModal";
-import {
-  MockAuthModal,
-  MockProfileModal,
-  MockSettingsModal,
-  MockSimpleInfoModal,
-  MockTokenPlansModal,
-} from "@/components/dashboard/mock-dashboard-panels";
+import { AccountPanel, type AccountPanelTab } from "@/components/dashboard/AccountPanel";
+import { MockAuthModal, MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
 import { formatTokensRuSpace } from "@/lib/format-metrics";
 
 export type DashboardView = "home" | "competitors" | "saved" | "scripts";
@@ -82,16 +76,16 @@ type UserPanelProps = {
 };
 
 export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
-  const profileWrapRef = useRef<HTMLDivElement>(null);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [tokenPlansOpen, setTokenPlansOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [accountPanelOpen, setAccountPanelOpen] = useState(false);
+  const [accountPanelTab, setAccountPanelTab] = useState<AccountPanelTab>("profile");
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "logout">("login");
   const [serviceMenuOpen, setServiceMenuOpen] = useState(false);
 
-  const closeProfileMenu = () => setProfileMenuOpen(false);
+  const openAccountPanel = (tab: AccountPanelTab) => {
+    setAccountPanelTab(tab);
+    setAccountPanelOpen(true);
+  };
 
   return (
     <aside className="shrink-0 bg-transparent px-0 pb-0 pt-0">
@@ -117,7 +111,7 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
           </div>
           <button
             type="button"
-            onClick={() => setTokenPlansOpen(true)}
+            onClick={() => openAccountPanel("tokens")}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
             aria-label="Пополнить токены"
           >
@@ -130,10 +124,7 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
         <div className="mt-2 hidden grid-cols-2 gap-2 lg:grid">
           <button
             type="button"
-            onClick={() => {
-              closeProfileMenu();
-              setSettingsOpen(true);
-            }}
+            onClick={() => openAccountPanel("settings")}
             className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
           >
             <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
@@ -142,11 +133,10 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
             </svg>
             Настройки
           </button>
-          <div ref={profileWrapRef} className="relative">
+          <div>
             <button
               type="button"
-              onClick={() => setProfileMenuOpen((v) => !v)}
-              aria-expanded={profileMenuOpen}
+              onClick={() => openAccountPanel("profile")}
               className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
             >
               <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
@@ -154,70 +144,6 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
               </svg>
               Профиль
             </button>
-            <DashboardAnchoredLayer
-              open={profileMenuOpen}
-              onClose={() => setProfileMenuOpen(false)}
-              anchorRef={profileWrapRef}
-              matchAnchorWidth
-            >
-              <button
-                type="button"
-                role="menuitem"
-                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
-                onClick={() => {
-                  closeProfileMenu();
-                  setProfileModalOpen(true);
-                }}
-              >
-                Профиль
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
-                onClick={() => {
-                  closeProfileMenu();
-                  setSettingsOpen(true);
-                }}
-              >
-                Настройки
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
-                onClick={() => {
-                  closeProfileMenu();
-                  setTokenPlansOpen(true);
-                }}
-              >
-                Тарифы
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
-                onClick={() => {
-                  closeProfileMenu();
-                  setAuthMode("login");
-                  setAuthOpen(true);
-                }}
-              >
-                Войти
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="block w-full px-3 py-2 text-left text-xs font-medium text-zinc-800 hover:bg-emerald-50"
-                onClick={() => {
-                  closeProfileMenu();
-                  setAuthMode("logout");
-                  setAuthOpen(true);
-                }}
-              >
-                Выйти
-              </button>
-            </DashboardAnchoredLayer>
           </div>
         </div>
 
@@ -284,14 +210,24 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
         </div>
       </div>
 
-      <MockTokenPlansModal open={tokenPlansOpen} onClose={() => setTokenPlansOpen(false)} balanceTokens={user.tokens} />
-      <MockSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <MockProfileModal
-        open={profileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
+      <AccountPanel
+        open={accountPanelOpen}
+        activeTab={accountPanelTab}
+        onTabChange={setAccountPanelTab}
+        onClose={() => setAccountPanelOpen(false)}
         email={user.email}
         plan={user.plan}
-        anchorRef={profileWrapRef}
+        balanceTokens={user.tokens}
+        onLogin={() => {
+          setAccountPanelOpen(false);
+          setAuthMode("login");
+          setAuthOpen(true);
+        }}
+        onLogout={() => {
+          setAccountPanelOpen(false);
+          setAuthMode("logout");
+          setAuthOpen(true);
+        }}
       />
       <MockAuthModal open={authOpen} onClose={() => setAuthOpen(false)} mode={authMode} />
       <MockSimpleInfoModal

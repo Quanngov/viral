@@ -11,7 +11,7 @@ type WeeklyTrendsSectionProps = {
 
 export function WeeklyTrendsSection({ trends, open, onToggle }: WeeklyTrendsSectionProps) {
   return (
-    <section className={`rounded-2xl bg-transparent px-6 pt-3 ${open ? "pb-2" : "pb-1"}`}>
+    <section className={`rounded-2xl bg-transparent px-6 pt-5 ${open ? "pb-2" : "pb-1"}`}>
       <header className="mb-0 flex shrink-0 items-center gap-3">
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">Тренды недели</h2>
         <button

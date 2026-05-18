@@ -16,6 +16,80 @@ const PLANS = [
   { id: "scale", name: "Scale", tokens: 15_000, price: "8 990 ₽", desc: "Команды и высокий объём" },
 ] as const;
 
+const TOKEN_PACKS = [
+  { id: "pack-s", tokens: 500, price: "490 ₽", desc: "Разовое пополнение" },
+  { id: "pack-m", tokens: 2_000, price: "1 490 ₽", desc: "На неделю активного поиска" },
+  { id: "pack-l", tokens: 5_000, price: "2 990 ₽", desc: "Запас на месяц" },
+] as const;
+
+function BalanceBanner({ balanceTokens }: { balanceTokens: number }) {
+  return (
+    <p className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
+      Текущий баланс:{" "}
+      <span className="tabular-nums font-bold">{balanceTokens.toLocaleString("ru-RU")}</span> токенов
+    </p>
+  );
+}
+
+export function AccountPlansContent({ balanceTokens }: { balanceTokens: number }) {
+  return (
+    <>
+      <BalanceBanner balanceTokens={balanceTokens} />
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {PLANS.map((p) => (
+          <div
+            key={p.id}
+            className="flex flex-col rounded-2xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50/80 p-4 shadow-sm"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{p.name}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-zinc-900">{p.tokens.toLocaleString("ru-RU")}</p>
+            <p className="text-xs text-zinc-500">токенов / месяц</p>
+            <p className="mt-2 text-sm font-semibold text-zinc-800">{p.price}</p>
+            <p className="mt-1 flex-1 text-xs leading-relaxed text-zinc-600">{p.desc}</p>
+            <button
+              type="button"
+              className="mt-4 w-full rounded-xl bg-emerald-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+            >
+              Выбрать тариф
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-center text-xs text-zinc-500">Оплата и смена тарифа появятся позже.</p>
+    </>
+  );
+}
+
+export function AccountTokensContent({ balanceTokens }: { balanceTokens: number }) {
+  return (
+    <>
+      <BalanceBanner balanceTokens={balanceTokens} />
+      <p className="mt-3 text-sm text-zinc-600">Разовые пакеты токенов. Оплата пока не подключена — только демо.</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {TOKEN_PACKS.map((p) => (
+          <div
+            key={p.id}
+            className="flex flex-col rounded-2xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50/80 p-4 shadow-sm"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Пакет</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-zinc-900">{p.tokens.toLocaleString("ru-RU")}</p>
+            <p className="text-xs text-zinc-500">токенов</p>
+            <p className="mt-2 text-sm font-semibold text-zinc-800">{p.price}</p>
+            <p className="mt-1 flex-1 text-xs leading-relaxed text-zinc-600">{p.desc}</p>
+            <button
+              type="button"
+              className="mt-4 w-full rounded-xl bg-emerald-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+            >
+              Пополнить
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-center text-xs text-zinc-500">Оплата и реальное пополнение появятся позже.</p>
+    </>
+  );
+}
+
 export function MockTokenPlansModal({ open, onClose, balanceTokens }: MockTokenPlansModalProps) {
   return (
     <DashboardModal
@@ -26,32 +100,66 @@ export function MockTokenPlansModal({ open, onClose, balanceTokens }: MockTokenP
       placement="center"
       wide
     >
-      <p className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
-        Текущий баланс:{" "}
-        <span className="tabular-nums font-bold">{balanceTokens.toLocaleString("ru-RU")}</span> токенов
+      <AccountPlansContent balanceTokens={balanceTokens} />
+    </DashboardModal>
+  );
+}
+
+export function AccountProfileContent({
+  email,
+  plan,
+  balanceTokens,
+  onLogin,
+  onLogout,
+}: {
+  email: string;
+  plan: string;
+  balanceTokens: number;
+  onLogin?: () => void;
+  onLogout?: () => void;
+}) {
+  return (
+    <dl className="space-y-3 text-sm">
+      <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2">
+        <dt className="text-xs font-semibold uppercase text-zinc-400">Email</dt>
+        <dd className="mt-0.5 font-medium text-zinc-900">{email}</dd>
+      </div>
+      <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2">
+        <dt className="text-xs font-semibold uppercase text-zinc-400">Тариф</dt>
+        <dd className="mt-0.5 font-medium text-zinc-900">{plan}</dd>
+      </div>
+      <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2">
+        <dt className="text-xs font-semibold uppercase text-zinc-400">Баланс токенов</dt>
+        <dd className="mt-0.5 font-medium tabular-nums text-zinc-900">
+          {balanceTokens.toLocaleString("ru-RU")}
+        </dd>
+      </div>
+      <p className="text-xs text-zinc-500">
+        Реальная авторизация и редактирование профиля будут подключены отдельно. Cookie-сессия токенов не меняется.
       </p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {PLANS.map((p) => (
-          <div
-            key={p.id}
-            className="flex flex-col rounded-2xl border border-zinc-200 bg-gradient-to-b from-white to-zinc-50/80 p-4 shadow-sm"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{p.name}</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-zinc-900">{p.tokens.toLocaleString("ru-RU")}</p>
-            <p className="text-xs text-zinc-500">токенов</p>
-            <p className="mt-2 text-sm font-semibold text-zinc-800">{p.price}</p>
-            <p className="mt-1 flex-1 text-xs leading-relaxed text-zinc-600">{p.desc}</p>
+      {onLogin || onLogout ? (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {onLogin ? (
             <button
               type="button"
-              className="mt-4 w-full rounded-xl bg-emerald-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              onClick={onLogin}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-emerald-50"
             >
-              Выбрать
+              Войти
             </button>
-          </div>
-        ))}
-      </div>
-      <p className="mt-4 text-center text-xs text-zinc-500">Оплата и реальное пополнение появятся позже.</p>
-    </DashboardModal>
+          ) : null}
+          {onLogout ? (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-emerald-50"
+            >
+              Выйти
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </dl>
   );
 }
 
@@ -60,10 +168,11 @@ type MockProfileModalProps = {
   onClose: () => void;
   email: string;
   plan: string;
+  balanceTokens: number;
   anchorRef: RefObject<HTMLElement | null>;
 };
 
-export function MockProfileModal({ open, onClose, email, plan, anchorRef }: MockProfileModalProps) {
+export function MockProfileModal({ open, onClose, email, plan, balanceTokens, anchorRef }: MockProfileModalProps) {
   return (
     <DashboardAnchoredCard
       open={open}
@@ -72,19 +181,7 @@ export function MockProfileModal({ open, onClose, email, plan, anchorRef }: Mock
       title="Профиль"
       subtitle="Демо-данные, без сохранения в БД."
     >
-      <dl className="space-y-3 text-sm">
-        <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2">
-          <dt className="text-xs font-semibold uppercase text-zinc-400">Email</dt>
-          <dd className="mt-0.5 font-medium text-zinc-900">{email}</dd>
-        </div>
-        <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2">
-          <dt className="text-xs font-semibold uppercase text-zinc-400">Тариф</dt>
-          <dd className="mt-0.5 font-medium text-zinc-900">{plan}</dd>
-        </div>
-        <p className="text-xs text-zinc-500">
-          Реальная авторизация и редактирование профиля будут подключены отдельно. Cookie-сессия токенов не меняется.
-        </p>
-      </dl>
+      <AccountProfileContent email={email} plan={plan} balanceTokens={balanceTokens} />
     </DashboardAnchoredCard>
   );
 }
@@ -175,7 +272,7 @@ export function MockAuthModal({ open, onClose, mode }: MockAuthModalProps) {
 
 type SettingsTab = "account" | "notifications" | "limits" | "sources" | "appearance";
 
-export function MockSettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AccountSettingsContent() {
   const [tab, setTab] = useState<SettingsTab>("account");
   const [digest, setDigest] = useState(true);
   const [autoSpy, setAutoSpy] = useState(false);
@@ -196,14 +293,7 @@ export function MockSettingsModal({ open, onClose }: { open: boolean; onClose: (
   );
 
   return (
-    <DashboardModal
-      open={open}
-      onClose={onClose}
-      title="Настройки"
-      subtitle="Только интерфейс, без сохранения."
-      placement="drawer-right"
-      wide
-    >
+    <>
       <div className="flex flex-wrap gap-1 rounded-xl bg-zinc-100 p-1">
         {tabs.map((t) => (
           <button
@@ -302,6 +392,21 @@ export function MockSettingsModal({ open, onClose }: { open: boolean; onClose: (
           </div>
         )}
       </div>
+    </>
+  );
+}
+
+export function MockSettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <DashboardModal
+      open={open}
+      onClose={onClose}
+      title="Настройки"
+      subtitle="Только интерфейс, без сохранения."
+      placement="drawer-right"
+      wide
+    >
+      <AccountSettingsContent />
     </DashboardModal>
   );
 }
