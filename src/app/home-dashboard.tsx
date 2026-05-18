@@ -68,11 +68,11 @@ function HomeDashboardInner() {
     <ToastProvider>
       <SavedVideosProvider>
         <DashboardLayout>
-          {/* Dashboard grid - левая sticky колонка + основной контент */}
-          <div className="grid grid-cols-[320px_minmax(0,1fr)] items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          {/* Dashboard: фиксированная левая колонка + скролл справа */}
+          <div className="flex h-dvh min-h-0 w-full overflow-hidden">
             
-            {/* Левая sticky колонка */}
-            <aside className="z-20 hidden h-[calc(100dvh-16px)] flex-col gap-3 self-start overflow-hidden lg:sticky lg:top-2 lg:flex">
+            {/* Левая колонка — не скроллится */}
+            <aside className="z-20 hidden h-dvh w-[360px] shrink-0 flex-col gap-3 overflow-hidden bg-[#f4f5f7] py-2 pl-2 pr-3 lg:flex">
               
               {/* Карточка трендов */}
               <section className="min-h-0 flex-1 overflow-hidden">
@@ -86,12 +86,12 @@ function HomeDashboardInner() {
 
             </aside>
 
-            {/* Основной контент */}
+            {/* Основной контент — скроллится отдельно */}
             <main
-              className={`flex min-h-0 min-w-0 flex-1 flex-col bg-transparent ${
+              className={`min-h-0 min-w-0 flex-1 bg-transparent min-h-screen ${
                 activeView === "scripts"
-                  ? "h-[100dvh] max-h-[100dvh] overflow-hidden pb-3 sm:pb-4"
-                  : "pb-12"
+                  ? "h-dvh overflow-hidden pb-3 sm:pb-4"
+                  : "overflow-y-auto pb-12 lg:h-dvh"
               }`}
             >
           {activeView === "home" ? (

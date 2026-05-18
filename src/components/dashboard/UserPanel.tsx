@@ -94,7 +94,7 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
   const closeProfileMenu = () => setProfileMenuOpen(false);
 
   return (
-    <aside className="shrink-0 bg-transparent px-3 pb-2 pt-0">
+    <aside className="shrink-0 bg-transparent px-0 pb-0 pt-0">
       <div className="flex flex-col rounded-xl bg-white p-3 shadow-sm shadow-zinc-900/5 lg:flex-col">
         <p className="mb-2 hidden truncate text-xs font-medium text-zinc-500 lg:block">{user.email}</p>
         <div className="hidden items-start gap-2 lg:flex">
