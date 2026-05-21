@@ -151,9 +151,10 @@ export function SearchToolbar({
   return (
     <div
       ref={rootRef}
-      className="flex shrink-0 flex-col gap-4 rounded-2xl bg-white p-5 shadow-sm shadow-zinc-900/5"
+      className="flex shrink-0 flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm shadow-zinc-900/5 sm:gap-4 sm:p-5"
     >
-      <div className="flex w-full min-w-0 items-center gap-3">
+      <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+        <div className="flex w-full min-w-0 gap-2">
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">Поиск по теме</span>
           <input
@@ -165,7 +166,7 @@ export function SearchToolbar({
             }}
             placeholder="Введите тему, нишу или ключевое слово..."
             disabled={searching}
-            className="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 text-sm text-zinc-900 outline-none ring-emerald-500/20 transition-all placeholder:text-zinc-400 focus:border-emerald-400 focus:bg-white focus:ring-4 disabled:opacity-60"
+            className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 text-sm text-zinc-900 outline-none ring-emerald-500/20 transition-all placeholder:text-zinc-400 focus:border-emerald-400 focus:bg-white focus:ring-4 disabled:opacity-60 lg:h-11"
           />
         </label>
 
@@ -173,14 +174,15 @@ export function SearchToolbar({
           type="button"
           onClick={submit}
           disabled={searching || !query.trim()}
-          className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-50"
+          className="flex h-12 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-50 lg:h-11"
           title="Стоимость одного поиска (мок)"
         >
           <span className="tabular-nums">{searchCost}</span>
           <LightningIcon className="h-5 w-5 text-emerald-100" />
         </button>
+        </div>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex w-full shrink-0 items-center gap-1 overflow-x-auto scrollbar-hidden lg:w-auto lg:overflow-visible">
           <div className="relative">
             <button
               type="button"

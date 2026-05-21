@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed:youtube": "tsx --tsconfig tsconfig.json scripts/seed-youtube.ts",
+    "migrate:sqlite-to-supabase": "tsx --tsconfig tsconfig.json scripts/migrate-sqlite-to-supabase.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

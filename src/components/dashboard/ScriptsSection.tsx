@@ -4,7 +4,7 @@ import { ScriptGeneratorSection } from "@/components/dashboard/script-generator/
 
 export function ScriptsSection() {
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col lg:h-full lg:overflow-hidden">
       <ScriptGeneratorSection />
     </div>
   );

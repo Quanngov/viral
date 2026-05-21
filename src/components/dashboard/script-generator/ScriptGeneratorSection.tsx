@@ -536,14 +536,14 @@ export function ScriptGeneratorSection() {
     "Например: я занимаюсь видеопродакшеном для экспертов и бизнеса. Помогаю через Reels/Shorts привлекать клиентов. В конце ролика обычно призываю написать мне в Telegram. Стиль — уверенный, живой, без канцелярита. Нельзя обещать гарантированный результат.";
 
   return (
-    <div className="flex h-full min-h-0 max-h-full flex-1 flex-col gap-3 overflow-hidden px-4 pb-3 pt-3 sm:px-6 sm:pt-4 sm:pb-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-visible px-3 pb-24 pt-3 lg:h-full lg:max-h-full lg:overflow-hidden lg:px-6 lg:pb-4 lg:pt-4">
       <h1 className="shrink-0 text-xl font-semibold leading-snug tracking-tight text-zinc-900 sm:text-2xl sm:leading-snug">
         Генерация сценариев
       </h1>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row lg:items-stretch">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-visible lg:flex-row lg:items-stretch lg:gap-4 lg:overflow-hidden">
         {/* Чат */}
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-sm shadow-zinc-900/5 lg:max-w-[50%] lg:flex-[1]">
+        <section className="flex min-h-[min(70vh,520px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-sm shadow-zinc-900/5 lg:min-h-0 lg:max-w-[50%] lg:flex-[1]">
           <div ref={chatMenuRef} className="relative shrink-0 border-b border-zinc-100 pb-3">
             <div className="flex justify-center">
               <button
@@ -770,7 +770,7 @@ export function ScriptGeneratorSection() {
           </div>
         </section>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto lg:max-w-[50%] lg:flex-[1] lg:overflow-hidden">
+        <div className="flex flex-col gap-3 lg:min-h-0 lg:max-w-[50%] lg:flex-[1] lg:flex-col lg:gap-4 lg:overflow-y-auto lg:overflow-hidden">
           <section className="flex max-h-[40vh] min-h-[180px] flex-col rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-sm shadow-zinc-900/5 lg:flex-[1]">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-zinc-900">Инфо для сценариев</h2>

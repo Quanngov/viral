@@ -66,17 +66,18 @@ export function VideoCard({ video, onOpen, variant = "compact" }: VideoCardProps
         )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
         <span className="pointer-events-none absolute left-2.5 top-2.5 rounded-md bg-black/50 p-0.5 shadow-md">
-          <PlatformIcon platform={platform} size={18} className="block" />
+          <PlatformIcon platform={platform} size={22} className="block lg:!hidden" />
+          <PlatformIcon platform={platform} size={18} className="hidden lg:block" />
         </span>
         <span
-          className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[1.9rem] items-center justify-center rounded-lg border px-1.5 py-0.5 text-sm font-semibold tabular-nums shadow-md transition-transform duration-200 group-hover:scale-[1.02] ${ratingStyle(rating)}`}
+          className={`pointer-events-none absolute right-2.5 top-2.5 flex min-w-[1.9rem] items-center justify-center rounded-lg border px-2 py-1 text-xs font-semibold tabular-nums shadow-md transition-transform duration-200 group-hover:scale-[1.02] sm:px-1.5 sm:py-0.5 sm:text-sm lg:px-1.5 lg:py-0.5 ${ratingStyle(rating)}`}
           title="Оценка ролика (0–99)"
         >
           {rating}
         </span>
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 pt-10">
-          <span className="text-xs font-semibold tabular-nums text-white drop-shadow-sm">{video.views}</span>
-          <span className="shrink-0 text-xs font-semibold text-white/95 drop-shadow-sm">
+          <span className="text-[13px] font-semibold tabular-nums text-white drop-shadow-sm sm:text-xs">{video.views}</span>
+          <span className="shrink-0 text-[13px] font-semibold text-white/95 drop-shadow-sm sm:text-xs">
             {video.ageCompact ?? video.publishedAt}
           </span>
         </div>

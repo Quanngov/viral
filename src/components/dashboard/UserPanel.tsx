@@ -73,9 +73,55 @@ type UserPanelProps = {
   user: MockUser;
   activeView: DashboardView;
   onChangeView: (view: DashboardView) => void;
+  layout?: "sidebar" | "bottom-nav";
 };
 
-export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
+const accountModals = (
+  props: {
+    accountPanelOpen: boolean;
+    accountPanelTab: AccountPanelTab;
+    setAccountPanelTab: (tab: AccountPanelTab) => void;
+    setAccountPanelOpen: (open: boolean) => void;
+    user: MockUser;
+    authOpen: boolean;
+    authMode: "login" | "logout";
+    setAuthOpen: (open: boolean) => void;
+    serviceMenuOpen: boolean;
+    setServiceMenuOpen: (open: boolean) => void;
+    setAuthMode: (mode: "login" | "logout") => void;
+  },
+) => (
+  <>
+    <AccountPanel
+      open={props.accountPanelOpen}
+      activeTab={props.accountPanelTab}
+      onTabChange={props.setAccountPanelTab}
+      onClose={() => props.setAccountPanelOpen(false)}
+      email={props.user.email}
+      plan={props.user.plan}
+      balanceTokens={props.user.tokens}
+      onLogin={() => {
+        props.setAccountPanelOpen(false);
+        props.setAuthMode("login");
+        props.setAuthOpen(true);
+      }}
+      onLogout={() => {
+        props.setAccountPanelOpen(false);
+        props.setAuthMode("logout");
+        props.setAuthOpen(true);
+      }}
+    />
+    <MockAuthModal open={props.authOpen} onClose={() => props.setAuthOpen(false)} mode={props.authMode} />
+    <MockSimpleInfoModal
+      open={props.serviceMenuOpen}
+      onClose={() => props.setServiceMenuOpen(false)}
+      title="Сервис"
+      body="Демо-меню: поддержка, документация и юридическая информация появятся позже. Рабочие функции дашборда не затронуты."
+    />
+  </>
+);
+
+export function UserPanel({ user, activeView, onChangeView, layout = "sidebar" }: UserPanelProps) {
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
   const [accountPanelTab, setAccountPanelTab] = useState<AccountPanelTab>("profile");
   const [authOpen, setAuthOpen] = useState(false);
@@ -86,6 +132,50 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
     setAccountPanelTab(tab);
     setAccountPanelOpen(true);
   };
+
+  const modalProps = {
+    accountPanelOpen,
+    accountPanelTab,
+    setAccountPanelTab,
+    setAccountPanelOpen,
+    user,
+    authOpen,
+    authMode,
+    setAuthOpen,
+    serviceMenuOpen,
+    setServiceMenuOpen,
+    setAuthMode,
+  };
+
+  if (layout === "bottom-nav") {
+    return (
+      <>
+        <nav className="flex gap-1 px-2 py-2">
+          {tools
+            .filter((item) => !item.soon)
+            .map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => item.view && onChangeView(item.view)}
+                className={`flex flex-1 flex-col items-center gap-1 rounded-lg px-1.5 py-2 text-xs font-medium transition-colors ${
+                  item.view === activeView
+                    ? "bg-emerald-100 text-emerald-900"
+                    : "text-zinc-700 hover:bg-emerald-50 hover:text-emerald-900"
+                }`}
+                aria-label={item.label}
+              >
+                <span className="flex h-5 w-5 items-center justify-center [&>svg]:h-5 [&>svg]:w-5">
+                  {item.icon}
+                </span>
+                <span className="max-w-full truncate text-[10px] leading-tight">{item.label.split(" ")[0]}</span>
+              </button>
+            ))}
+        </nav>
+        {accountModals(modalProps)}
+      </>
+    );
+  }
 
   return (
     <aside className="shrink-0 bg-transparent px-0 pb-0 pt-0">
@@ -175,25 +265,6 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
           ))}
         </nav>
 
-        {/* Mobile navigation - horizontal layout */}
-        <nav className="flex gap-1 lg:hidden">
-          {tools.filter(item => !item.soon).map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => item.view && onChangeView(item.view)}
-              className={`flex flex-1 flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${
-                item.view === activeView
-                  ? "bg-emerald-100 text-emerald-900"
-                  : "text-zinc-700 hover:bg-emerald-50 hover:text-emerald-900"
-              }`}
-              aria-label={item.label}
-            >
-              <div className="h-4 w-4">{item.icon}</div>
-              <span className="truncate text-[10px]">{item.label.split(" ")[0]}</span>
-            </button>
-          ))}
-        </nav>
 
         <div className="mt-2 hidden items-center justify-between gap-2 border-t border-zinc-100 pt-2 lg:flex">
           <span className="truncate text-base font-semibold tracking-tight text-zinc-800">{SERVICE_NAME}</span>
@@ -210,32 +281,7 @@ export function UserPanel({ user, activeView, onChangeView }: UserPanelProps) {
         </div>
       </div>
 
-      <AccountPanel
-        open={accountPanelOpen}
-        activeTab={accountPanelTab}
-        onTabChange={setAccountPanelTab}
-        onClose={() => setAccountPanelOpen(false)}
-        email={user.email}
-        plan={user.plan}
-        balanceTokens={user.tokens}
-        onLogin={() => {
-          setAccountPanelOpen(false);
-          setAuthMode("login");
-          setAuthOpen(true);
-        }}
-        onLogout={() => {
-          setAccountPanelOpen(false);
-          setAuthMode("logout");
-          setAuthOpen(true);
-        }}
-      />
-      <MockAuthModal open={authOpen} onClose={() => setAuthOpen(false)} mode={authMode} />
-      <MockSimpleInfoModal
-        open={serviceMenuOpen}
-        onClose={() => setServiceMenuOpen(false)}
-        title="Сервис"
-        body="Демо-меню: поддержка, документация и юридическая информация появятся позже. Рабочие функции дашборда не затронуты."
-      />
+      {accountModals(modalProps)}
     </aside>
   );
 }

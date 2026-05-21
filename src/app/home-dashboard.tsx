@@ -88,14 +88,15 @@ function HomeDashboardInner() {
 
             {/* Основной контент — скроллится отдельно */}
             <main
-              className={`min-h-0 min-w-0 flex-1 bg-transparent min-h-screen ${
+              className={`min-h-0 min-w-0 flex-1 bg-transparent min-h-screen pb-[calc(4.5rem+env(safe-area-inset-bottom))] ${
                 activeView === "scripts"
-                  ? "h-dvh overflow-hidden pb-3 sm:pb-4"
-                  : "overflow-y-auto pb-12 lg:h-dvh"
+                  ? "overflow-y-auto lg:h-dvh lg:overflow-hidden lg:pb-3 sm:lg:pb-4"
+                  : "overflow-y-auto lg:h-dvh lg:pb-12"
               }`}
             >
           {activeView === "home" ? (
             <>
+              <LiveTrendsSidebar variant="mobile-horizontal" onVideoClick={setSelectedVideo} />
               <WeeklyTrendsSection
                 trends={mockWeeklyTrends}
                 open={weeklyOpen}
@@ -110,7 +111,7 @@ function HomeDashboardInner() {
           ) : activeView === "saved" ? (
             <SavedVideosSection isActive onVideoClick={setSelectedVideo} />
           ) : (
-            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col lg:h-full lg:overflow-hidden">
               <ScriptsSection />
             </div>
           )}
@@ -120,8 +121,13 @@ function HomeDashboardInner() {
           </div>
 
           {/* Мобильная навигация */}
-          <div className="border-t border-zinc-200 bg-white lg:hidden">
-            <UserPanel user={mockUser} activeView={activeView} onChangeView={setActiveView} />
+          <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] lg:hidden">
+            <UserPanel
+              layout="bottom-nav"
+              user={mockUser}
+              activeView={activeView}
+              onChangeView={setActiveView}
+            />
           </div>
 
         <VideoDetailPanel
