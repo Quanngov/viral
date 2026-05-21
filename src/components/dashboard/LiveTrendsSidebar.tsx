@@ -45,6 +45,29 @@ type LiveTrendsSidebarProps = {
 };
 
 const POLLING_INTERVAL = 50000;
+const LAZY_REFRESH_SESSION_KEY = "viral_trends_lazy_refresh_v1";
+
+/** One lazy-refresh per tab session (survives Strict Mode remount). */
+let lazyRefreshInFlight: Promise<void> | null = null;
+
+function runLazyRefreshOnce(): void {
+  if (typeof sessionStorage !== "undefined") {
+    const last = sessionStorage.getItem(LAZY_REFRESH_SESSION_KEY);
+    if (last && Date.now() - Number(last) < 15 * 60 * 1000) return;
+  }
+  if (lazyRefreshInFlight) return;
+
+  lazyRefreshInFlight = fetch("/api/trends/lazy-refresh", { method: "POST" })
+    .catch((err) => console.warn("Lazy refresh failed:", err))
+    .finally(() => {
+      lazyRefreshInFlight = null;
+      try {
+        sessionStorage.setItem(LAZY_REFRESH_SESSION_KEY, String(Date.now()));
+      } catch {
+        /* ignore */
+      }
+    }) as Promise<void>;
+}
 
 function toGridVideo(video: LiveTrendVideo): GridVideo {
   return {
@@ -79,17 +102,28 @@ function useLiveTrends(enabled: boolean) {
   const [error, setError] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
-  const lazyRefreshCalledRef = useRef(false);
+  const fetchInFlightRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchTrends = useCallback(async () => {
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
+
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     try {
-      const response = await fetch("/api/trends/realtime?limit=10");
+      const response = await fetch("/api/trends/realtime?limit=10", {
+        signal: ac.signal,
+        cache: "no-store",
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || ac.signal.aborted) return;
 
       if (data.error) {
         throw new Error(data.message || "API error");
@@ -100,11 +134,18 @@ function useLiveTrends(enabled: boolean) {
 
       const liveTrends: LiveTrendVideo[] = trendItems.map((item: TrendItem, index: number) => {
         const isNew = newItems.some((newItem: { id: string }) => newItem.id === item.id);
+        const viewsRaw = item.video?.views;
+        const viewsNum =
+          typeof viewsRaw === "number"
+            ? viewsRaw
+            : typeof viewsRaw === "string"
+              ? Number(String(viewsRaw).replace(/\s/g, "")) || 0
+              : 0;
         return {
           id: item.video.id,
           title: item.video.title,
           thumbnailUrl: item.video.thumbnailUrl || "",
-          views: item.video.views.toLocaleString("ru-RU"),
+          views: viewsNum.toLocaleString("ru-RU"),
           platform: item.video.platform,
           isNew: isNew && index < 3,
         };
@@ -112,20 +153,17 @@ function useLiveTrends(enabled: boolean) {
 
       setTrends(liveTrends);
       setError(false);
-
-      if (!loaded) {
-        setLoaded(true);
-      }
+      setLoaded(true);
     } catch (err) {
+      if (ac.signal.aborted) return;
       console.error("Failed to fetch trends:", err);
       if (!mountedRef.current) return;
-
       setError(true);
-      if (!loaded) {
-        setLoaded(true);
-      }
+      setLoaded(true);
+    } finally {
+      fetchInFlightRef.current = false;
     }
-  }, [loaded]);
+  }, []);
 
   const startPolling = useCallback(() => {
     if (intervalRef.current) {
@@ -166,27 +204,16 @@ function useLiveTrends(enabled: boolean) {
     if (!enabled) return;
     mountedRef.current = true;
 
-    async function initialLoad() {
-      if (!lazyRefreshCalledRef.current) {
-        lazyRefreshCalledRef.current = true;
-        try {
-          await fetch("/api/trends/lazy-refresh", { method: "POST" });
-        } catch (err) {
-          console.error("Lazy refresh failed:", err);
-        }
-      }
+    runLazyRefreshOnce();
+    void fetchTrends();
 
-      await fetchTrends();
-
-      if (mountedRef.current && !document.hidden) {
-        startPolling();
-      }
+    if (!document.hidden) {
+      startPolling();
     }
-
-    initialLoad();
 
     return () => {
       mountedRef.current = false;
+      abortRef.current?.abort();
       stopPolling();
     };
   }, [enabled, fetchTrends, startPolling, stopPolling]);

@@ -1,8 +1,11 @@
+/** AI boundary: prompts & message assembly only. HTTP → deepseek-generate.ts; routes → generate/route.ts */
+import "server-only";
+
 import type { ScriptChatReference, ScriptMessage, ScriptUserProfile } from "@prisma/client";
 import type { DeepSeekChatMessage } from "@/lib/deepseek-generate";
+import { SCRIPT_PROMPT_REF_ONLY } from "@/lib/script-shared-constants";
 
-/** Маркер сохранённого user-сообщения: промт пустой, есть только референсы. */
-export const SCRIPT_PROMPT_REF_ONLY = "__SCRIPT_REF_ONLY__";
+export { SCRIPT_PROMPT_REF_ONLY };
 
 const EDITOR_VOICE_RULES = `Ты — опытный редактор и копирайтер. Твоя задача: писать сценарий так, чтобы он звучал как живой, думающий человек — не как языковая модель.
 

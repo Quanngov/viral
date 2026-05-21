@@ -12,6 +12,7 @@ export type AdminEventType =
   | "feed_search"
   | "feed_more"
   | "api_fetch"
+  | "api_route_error"
   | "token_spend"
   | "upsert"
   | "error"
@@ -75,7 +76,51 @@ export type LogAdminEventInput = {
   sessionId?: string | null;
   userId?: string | null;
   meta?: unknown;
+  /** Stdout only — no Prisma (hot paths / degraded mode). */
+  consoleOnly?: boolean;
+  /** Same key within throttle window → skip DB write. */
+  throttleKey?: string;
 };
+
+const THROTTLE_MS = 30_000;
+const CIRCUIT_COOLDOWN_MS = 60_000;
+const throttleLast = new Map<string, number>();
+let dbLogDisabledUntil = 0;
+let consecutiveFailures = 0;
+
+function isPrismaPoolError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("connection pool") ||
+    msg.includes("Timed out fetching a new connection") ||
+    msg.includes("P2024")
+  );
+}
+
+function canWriteAdminEventToDb(): boolean {
+  return Date.now() >= dbLogDisabledUntil;
+}
+
+function noteAdminEventFailure(err: unknown): void {
+  consecutiveFailures += 1;
+  if (isPrismaPoolError(err) || consecutiveFailures >= 2) {
+    dbLogDisabledUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+  }
+}
+
+function isThrottled(key: string): boolean {
+  const last = throttleLast.get(key) ?? 0;
+  if (Date.now() - last < THROTTLE_MS) return true;
+  throttleLast.set(key, Date.now());
+  return false;
+}
+
+function logAdminEventToConsole(input: LogAdminEventInput): void {
+  const line = `[admin-events] ${input.level} ${input.type}: ${input.message}`;
+  if (input.level === "error") console.error(line);
+  else if (input.level === "warn") console.warn(line);
+  else console.info(line);
+}
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -142,7 +187,20 @@ export function compactErrorMeta(e: unknown, extra?: Record<string, unknown>): R
   return base;
 }
 
+/**
+ * Fail-safe observability: never throws, never re-logs to DB on failure.
+ * Under pool pressure uses circuit breaker + stdout only.
+ */
 export async function logAdminEvent(input: LogAdminEventInput): Promise<void> {
+  if (input.consoleOnly || !canWriteAdminEventToDb()) {
+    logAdminEventToConsole(input);
+    return;
+  }
+
+  if (input.throttleKey && isThrottled(input.throttleKey)) {
+    return;
+  }
+
   try {
     let metaJson: string | null = null;
     if (input.meta !== undefined) {
@@ -163,7 +221,15 @@ export async function logAdminEvent(input: LogAdminEventInput): Promise<void> {
         metaJson,
       },
     });
+    consecutiveFailures = 0;
   } catch (err) {
-    console.warn("[admin-events] log failed", err instanceof Error ? err.message : err);
+    noteAdminEventFailure(err);
+    console.error(
+      "[admin-events] DB log failed; circuit open — stdout only for",
+      CIRCUIT_COOLDOWN_MS / 1000,
+      "s",
+      err instanceof Error ? err.message : err,
+    );
+    logAdminEventToConsole(input);
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { withApiRoute } from "@/lib/api-route";
 import { logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { prisma } from "@/lib/prisma";
 import { ensureSessionUser } from "@/lib/token-wallet";
@@ -65,7 +66,7 @@ function parsePayload(body: unknown): SaveVideoPayload | null {
   };
 }
 
-export async function GET(req: Request) {
+export const GET = withApiRoute("saved-videos.GET", async (req) => {
   const { userId, sessionKey } = await ensureSessionUser();
   const url = new URL(req.url);
   const logOpen = url.searchParams.get("log") === "1";
@@ -76,18 +77,19 @@ export async function GET(req: Request) {
   });
 
   if (logOpen) {
-    await logAdminEvent({
+    void logAdminEvent({
       level: "info",
       type: "saved_videos_open",
       message: "Открыт экран сохранённых",
       sessionId: sessionKey,
       userId,
       meta: safeMeta({ count: rows.length }),
+      consoleOnly: true,
     });
   }
 
   return NextResponse.json({ videos: rows });
-}
+});
 
 export async function POST(req: Request) {
   let body: unknown;

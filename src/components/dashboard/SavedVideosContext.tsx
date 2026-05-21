@@ -35,16 +35,23 @@ type SavedVideosContextValue = {
 const SavedVideosContext = createContext<SavedVideosContextValue | null>(null);
 
 async function fetchSavedMap(): Promise<SavedMap> {
-  const res = await fetch("/api/saved-videos", { cache: "no-store" });
-  if (!res.ok) return {};
-  const data = (await res.json()) as {
-    videos?: { platform: string; externalId: string }[];
-  };
-  const next: SavedMap = {};
-  for (const v of data.videos ?? []) {
-    next[`${v.platform}:${v.externalId}`] = true;
+  try {
+    const res = await fetch("/api/saved-videos", { cache: "no-store" });
+    if (!res.ok) return {};
+    const data = (await res.json()) as {
+      success?: boolean;
+      error?: string;
+      videos?: { platform: string; externalId: string }[];
+    };
+    if (data.error && !data.videos) return {};
+    const next: SavedMap = {};
+    for (const v of data.videos ?? []) {
+      next[`${v.platform}:${v.externalId}`] = true;
+    }
+    return next;
+  } catch {
+    return {};
   }
-  return next;
 }
 
 export function SavedVideosProvider({ children }: { children: ReactNode }) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withApiRoute } from "@/lib/api-route";
 import { prisma } from "@/lib/prisma";
 import { ensureSessionUser } from "@/lib/token-wallet";
 
@@ -17,7 +18,7 @@ function clipProfileText(s: unknown): string {
   return s.trim().slice(0, MAX_PROFILE_TEXT);
 }
 
-export async function GET() {
+export const GET = withApiRoute("script-generator.profile.GET", async () => {
   const { userId } = await ensureSessionUser();
   const profile = await prisma.scriptUserProfile.upsert({
     where: { userId },
@@ -25,7 +26,7 @@ export async function GET() {
     update: {},
   });
   return NextResponse.json({ profile });
-}
+});
 
 export async function POST(req: Request) {
   const { userId } = await ensureSessionUser();

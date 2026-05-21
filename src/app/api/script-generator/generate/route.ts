@@ -6,6 +6,7 @@ import { creditTokens, ensureSessionUser, getTokenBalanceForUser, spendTokens } 
 import { getDeepSeekEnv, getScriptGenerationTokenCost } from "@/lib/script-generator-config";
 import { USER_MSG } from "@/lib/api-user-messages";
 import { buildDeepSeekMessages, buildReferencesPromptBlock, SCRIPT_PROMPT_REF_ONLY } from "@/lib/script-generator-prompt";
+import { captureAiError } from "@/lib/sentry";
 
 export const dynamic = "force-dynamic";
 
@@ -181,6 +182,7 @@ export async function POST(req: Request) {
     await creditTokens(userId, cost, "script_generate_refund", { sessionId: sessionKey });
     const kind = e instanceof DeepSeekError ? e.kind : "unknown";
     const status = e instanceof DeepSeekError ? e.status : undefined;
+    captureAiError("script_generate", e, { chatId, kind, status });
     await logAdminEvent({
       level: "warn",
       type: "script_generate_error",

@@ -15,6 +15,21 @@ export type EnsureTrendPoolResult = {
  * Обеспечивает минимальное количество трендов в пуле.
  * Использует многослойную стратегию выбора роликов из Video.
  */
+function poolLog(
+  source: string,
+  input: Parameters<typeof logAdminEvent>[0],
+): ReturnType<typeof logAdminEvent> {
+  const hotPath = source === "realtime";
+  return logAdminEvent({
+    ...input,
+    consoleOnly: hotPath && input.level !== "error" ? true : input.consoleOnly,
+    throttleKey:
+      hotPath && input.level === "error"
+        ? `trend_pool_ensure_error:${source}`
+        : input.throttleKey,
+  });
+}
+
 export async function ensureTrendPool({
   minPublished = 10,
   minTotal = 20,
@@ -27,7 +42,7 @@ export async function ensureTrendPool({
   const now = new Date();
 
   try {
-    await logAdminEvent({
+    await poolLog(source, {
       level: "info",
       type: "trend_pool_ensure_started",
       message: "Запуск обеспечения пула трендов",
@@ -41,7 +56,7 @@ export async function ensureTrendPool({
     ]);
 
     if (publishedCount >= minPublished) {
-      await logAdminEvent({
+      await poolLog(source, {
         level: "info",
         type: "trend_pool_ensure_skipped",
         message: "Пул трендов уже достаточен",
@@ -75,7 +90,7 @@ export async function ensureTrendPool({
     const candidates = await getVideoCandidates(existingVideoIds, needed);
 
     if (candidates.length === 0) {
-      await logAdminEvent({
+      await poolLog(source, {
         level: "warn",
         type: "trend_pool_ensure_error",
         message: "Не найдено подходящих роликов для пула трендов",
@@ -155,7 +170,7 @@ export async function ensureTrendPool({
       totalAfter: totalCount + created,
     };
 
-    await logAdminEvent({
+    await poolLog(source, {
       level: "info",
       type: "trend_pool_ensure_finished",
       message: "Завершено обеспечение пула трендов",
@@ -165,7 +180,7 @@ export async function ensureTrendPool({
     return result;
 
   } catch (error) {
-    await logAdminEvent({
+    await poolLog(source, {
       level: "error",
       type: "trend_pool_ensure_error",
       message: "Ошибка при обеспечении пула трендов",

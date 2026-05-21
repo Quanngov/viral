@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { videoToClientJson } from "@/lib/serialize-video";
 import { logAdminEvent, safeMeta } from "@/lib/admin-events";
-import { ensureTrendPool } from "@/lib/trends/ensure-trend-pool";
-
+import { captureApiRouteError } from "@/lib/sentry";
+import { logRouteError } from "@/lib/server-log";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export async function GET(req: Request) {
   try {
@@ -22,12 +23,7 @@ export async function GET(req: Request) {
       publishedAt: string;
     }> = [];
 
-    // 0. Обеспечиваем минимальный пул трендов
-    await ensureTrendPool({
-      minPublished: limit,
-      minTotal: limit * 2,
-      source: "realtime",
-    });
+    // Pool fill — только lazy-refresh (не на каждый poll)
 
     // 1. Проверяем queued TrendItem с releaseAt <= now и публикуем максимум 1
     const queuedItems = await prisma.trendItem.findMany({
@@ -68,10 +64,11 @@ export async function GET(req: Request) {
           publishedAt: now.toISOString(),
         });
 
-        await logAdminEvent({
+        void logAdminEvent({
           level: "info",
           type: "trend_candidate_published",
           message: "Опубликован трендовый кандидат",
+          consoleOnly: true,
           meta: safeMeta({
             trendItemId: item.id,
             videoId: item.video.id,
@@ -122,20 +119,18 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
-    console.error("Realtime trends error:", error);
+    logRouteError("trends.realtime", error);
+    captureApiRouteError("trends.realtime", error);
 
-    try {
-      await logAdminEvent({
-        level: "error",
-        type: "trend_realtime_error",
-        message: "Ошибка при получении realtime трендов",
-        meta: safeMeta({
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      });
-    } catch {
-      // Ignore logging errors
-    }
+    void logAdminEvent({
+      level: "error",
+      type: "trend_realtime_error",
+      message: "Ошибка при получении realtime трендов",
+      throttleKey: "trend_realtime_error",
+      meta: safeMeta({
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    });
 
     return NextResponse.json(
       {

@@ -10,6 +10,7 @@ import { searchInstagramReelsTikHub } from "@/lib/providers/tikhubInstagram";
 import { upsertInstagramReelsFromTikHub } from "@/lib/feed/ingest-instagram";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 const DB_SCAN_THROTTLE_MINUTES = 15;
 const LAZY_DISCOVERY_THROTTLE_HOURS = 6;
@@ -279,28 +280,20 @@ export async function POST() {
   } catch (error) {
     console.error("Lazy refresh error:", error);
 
-    try {
-      const { sessionKey, userId } = await ensureSessionUser();
-      await logAdminEvent({
-        level: "error",
-        type: "trend_lazy_refresh_error",
-        message: "Критическая ошибка при lazy refresh",
-        sessionId: sessionKey,
-        userId,
-        meta: safeMeta({
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      });
-    } catch {
-      // Ignore logging errors
-    }
+    void logAdminEvent({
+      level: "error",
+      type: "trend_lazy_refresh_error",
+      message: "Критическая ошибка при lazy refresh",
+      throttleKey: "trend_lazy_refresh_error",
+      meta: safeMeta({
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    });
 
-    return NextResponse.json(
-      {
-        error: "internal_error",
-        message: "Ошибка при обновлении трендов",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      ok: false,
+      error: "internal_error",
+      message: "Ошибка при обновлении трендов",
+    });
   }
 }

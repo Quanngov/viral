@@ -5,9 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { ScriptAssistantMarkdown } from "@/components/dashboard/script-generator/ScriptAssistantMarkdown";
 import { formatViewsCount } from "@/lib/format-video";
-import { SCRIPT_REF_DUPLICATE_MESSAGE, SCRIPT_REF_LIMIT_MESSAGE } from "@/lib/script-chat-reference";
 import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
-import { SCRIPT_PROMPT_REF_ONLY } from "@/lib/script-generator-prompt";
+import {
+  SCRIPT_PROMPT_REF_ONLY,
+  SCRIPT_REF_DUPLICATE_MESSAGE,
+  SCRIPT_REF_LIMIT_MESSAGE,
+} from "@/lib/script-shared-constants";
 import { useToast } from "@/components/dashboard/ToastContext";
 
 type ChatSummary = { id: string; title: string; updatedAt: string; createdAt: string };

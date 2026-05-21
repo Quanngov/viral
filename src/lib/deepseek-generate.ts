@@ -1,4 +1,9 @@
+/**
+ * AI boundary: DeepSeek HTTP only. Prompts live in script-generator-prompt.ts.
+ * Routes must not build prompts here.
+ */
 import { getDeepSeekEnv } from "@/lib/script-generator-config";
+import { logAiEvent } from "@/lib/server-log";
 
 export type DeepSeekChatRole = "system" | "user" | "assistant";
 
@@ -75,9 +80,22 @@ export async function deepseekChatCompletion(messages: DeepSeekChatMessage[]): P
     const promptTokens = typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : undefined;
     const completionTokens = typeof usage?.completion_tokens === "number" ? usage.completion_tokens : undefined;
 
+    logAiEvent("deepseek_completion_ok", {
+      ok: true,
+      promptTokens,
+      completionTokens,
+    });
     return { text: content, promptTokens, completionTokens };
   } catch (e) {
-    if (e instanceof DeepSeekError) throw e;
+    if (e instanceof DeepSeekError) {
+      logAiEvent("deepseek_completion_fail", {
+        ok: false,
+        kind: e.kind,
+        status: e.status,
+        error: e,
+      });
+      throw e;
+    }
     if (e instanceof Error && e.name === "AbortError") {
       throw new DeepSeekError("Таймаут запроса к DeepSeek", "abort");
     }

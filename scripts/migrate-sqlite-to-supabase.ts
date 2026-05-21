@@ -246,7 +246,7 @@ async function migrateTable(
 
   let inserted = 0;
   let errors = 0;
-  const model = pg[delegate] as {
+  const model = pg[delegate] as unknown as {
     count: () => Promise<number>;
     createMany: (args: {
       data: unknown[];

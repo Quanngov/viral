@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { withApiRoute } from "@/lib/api-route";
 import { prisma } from "@/lib/prisma";
 import { ensureSessionUser } from "@/lib/token-wallet";
 import { getScriptGenerationTokenCost } from "@/lib/script-generator-config";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export const GET = withApiRoute("script-generator.chats.GET", async () => {
   const { userId } = await ensureSessionUser();
   const chats = await prisma.scriptChat.findMany({
     where: { userId },
@@ -13,7 +14,7 @@ export async function GET() {
     select: { id: true, title: true, updatedAt: true, createdAt: true },
   });
   return NextResponse.json({ chats, tokenCost: getScriptGenerationTokenCost() });
-}
+});
 
 export async function POST(req: Request) {
   const { userId } = await ensureSessionUser();

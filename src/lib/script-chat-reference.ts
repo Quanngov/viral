@@ -1,14 +1,17 @@
+import "server-only";
+
 import type { ScriptChatReference } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   resolveVideoForTranscription,
   type ResolveVideoForTranscriptionInput,
 } from "@/lib/resolve-video-for-transcription";
+import {
+  SCRIPT_REF_DUPLICATE_MESSAGE,
+  SCRIPT_REF_LIMIT_MESSAGE,
+} from "@/lib/script-shared-constants";
 
-export const SCRIPT_REF_LIMIT_MESSAGE =
-  "В один чат можно добавить только один ролик-референс. Создайте новый чат для другого ролика.";
-
-export const SCRIPT_REF_DUPLICATE_MESSAGE = "Этот ролик уже добавлен в чат";
+export { SCRIPT_REF_DUPLICATE_MESSAGE, SCRIPT_REF_LIMIT_MESSAGE };
 
 export type AttachScriptReferenceResult =
   | { ok: true; duplicate: boolean; reference: ScriptChatReference }

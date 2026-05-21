@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { withApiRoute } from "@/lib/api-route";
 import { prisma } from "@/lib/prisma";
 import { ensureSessionUser } from "@/lib/token-wallet";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+export const GET = withApiRoute("competitors.videos.GET", async (req) => {
   const { userId } = await ensureSessionUser();
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("mode") === "all" ? "all" : "latest";
@@ -41,4 +42,4 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json({ videos: rows });
-}
+});

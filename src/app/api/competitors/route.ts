@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withApiRoute } from "@/lib/api-route";
 import { detectCompetitorPlatform } from "@/lib/competitor-input";
 import { syncInstagramCompetitorReelsFromTikHub } from "@/lib/competitor-instagram-reels-sync";
 import { MAX_COMPETITORS_PER_USER } from "@/lib/competitor-daily-sync-config";
@@ -50,14 +51,14 @@ async function ytFetch<T>(path: string, params: Record<string, string>, apiKey: 
   return data as T;
 }
 
-export async function GET() {
+export const GET = withApiRoute("competitors.GET", async () => {
   const { userId } = await ensureSessionUser();
   const competitors = await prisma.competitorAccount.findMany({
     where: { userId },
     orderBy: [{ addedAt: "desc" }],
   });
   return NextResponse.json({ competitors });
-}
+});
 
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
