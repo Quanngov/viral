@@ -20,6 +20,8 @@ export function LiveTrendItem({ video, onClick }: LiveTrendItemProps) {
           fill
           sizes="36px"
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+          loading="lazy"
+          decoding="async"
         />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-2">

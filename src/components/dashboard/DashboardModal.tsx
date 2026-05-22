@@ -52,6 +52,10 @@ export type DashboardModalProps = {
   subtitle?: string;
   placement?: DashboardModalPlacement;
   wide?: boolean;
+  /** Narrower centered panel (auth, confirmations). */
+  compact?: boolean;
+  /** Backdrop blur is costly; disable for lightweight modals. */
+  backdropBlur?: boolean;
   /** drawer: wider panel (сценарии) */
   drawerSize?: "md" | "lg";
   children: ReactNode;
@@ -64,6 +68,8 @@ export function DashboardModal({
   subtitle,
   placement = "center",
   wide,
+  compact,
+  backdropBlur = true,
   drawerSize = "md",
   children,
 }: DashboardModalProps) {
@@ -86,7 +92,7 @@ export function DashboardModal({
       <button
         type="button"
         aria-label="Закрыть"
-        className="absolute inset-0 bg-black/45 backdrop-blur-[3px] transition-opacity"
+        className={`dashboard-ease absolute inset-0 bg-black/45 ${backdropBlur ? "backdrop-blur-[3px]" : ""}`}
         onClick={onClose}
       />
       {placement === "center" ? (
@@ -96,7 +102,7 @@ export function DashboardModal({
             aria-modal
             aria-labelledby={titleId}
             className={`pointer-events-auto flex max-h-[calc(100vh-32px)] w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-zinc-900/20 ${
-              wide ? "max-w-2xl" : "max-w-md"
+              wide ? "max-w-2xl" : compact ? "max-w-sm" : "max-w-md"
             }`}
             onClick={(e) => e.stopPropagation()}
           >

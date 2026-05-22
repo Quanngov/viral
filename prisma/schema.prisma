@@ -17,6 +17,9 @@ model Video {
   title         String
   description   String?
   thumbnailUrl  String?
+  /** null = unchecked; valid | invalid (excluded from home feed) */
+  thumbnailStatus    String?
+  thumbnailFailCount Int     @default(0)
   videoUrl      String?
   publishedAt   DateTime
   durationSeconds Int
@@ -71,6 +74,8 @@ model Video {
   @@unique([platform, externalId])
   @@index([sourceQuery])
   @@index([platform])
+  /** Home feed: duration/views filter + score sort */
+  @@index([durationSeconds, views, score(sort: Desc), viralScore(sort: Desc)])
 }
 
 model SearchCache {
@@ -165,10 +170,60 @@ model CompetitorVideo {
   @@unique([competitorId, platform, externalId])
 }
 
-/** Анонимный пользователь по httpOnly session id (не хранить баланс в cookie). */
+/** Auth.js user (OAuth / credentials). */
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  accounts      Account[]
+  sessions      Session[]
+  sessionUser   SessionUser?
+
+  @@map("AuthUser")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+/** App user row: tokens, saved videos, chats. Linked to Auth User when logged in. */
 model SessionUser {
   id         String   @id @default(cuid())
   sessionKey String   @unique
+  authUserId String?  @unique
+  authUser   User?    @relation(fields: [authUserId], references: [id], onDelete: SetNull)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

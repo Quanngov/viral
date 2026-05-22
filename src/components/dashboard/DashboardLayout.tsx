@@ -6,8 +6,8 @@ type DashboardLayoutProps = {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
-    <div className="min-h-screen bg-[#f4f5f7] font-sans text-zinc-900">
-      <div className="min-h-screen min-w-0 max-w-[100vw] overflow-x-hidden">{children}</div>
+    <div className="h-dvh max-h-dvh overflow-hidden bg-[#f4f5f7] font-sans text-zinc-900">
+      <div className="h-full min-h-0 min-w-0 max-w-[100vw] overflow-hidden">{children}</div>
     </div>
   );
 }

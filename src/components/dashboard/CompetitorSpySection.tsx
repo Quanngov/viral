@@ -13,7 +13,13 @@ import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { useToast } from "@/components/dashboard/ToastContext";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 import { formatMetricCount } from "@/lib/format-metrics";
+import { SKELETON_CARD_CLASS } from "@/components/dashboard/DashboardSkeletons";
 import { USER_MSG } from "@/lib/api-user-messages";
+import {
+  fetchCompetitorsBase,
+  peekCompetitorsBaseCache,
+  prefetchCompetitorsBase,
+} from "@/lib/dashboard-fetch";
 
 type CompetitorMode = "latest" | "all";
 type SortField = "account" | "views" | "likes" | "comments" | "score";
@@ -127,9 +133,10 @@ function Avatar({ account, size = 64 }: { account: CompetitorAccount; size?: num
 
 type CompetitorSpySectionProps = {
   onVideoClick?: (video: GridVideo) => void;
+  active?: boolean;
 };
 
-export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps) {
+export function CompetitorSpySection({ onVideoClick, active = true }: CompetitorSpySectionProps) {
   const { showToast } = useToast();
   const [competitors, setCompetitors] = useState<CompetitorAccount[]>([]);
   const [videos, setVideos] = useState<CompetitorVideoRow[]>([]);
@@ -223,32 +230,45 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
     setSortField(nextField);
   }
 
+  const bootstrappedRef = useRef(false);
+
   useEffect(() => {
+    if (!active) return;
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+
     let cancelled = false;
+
+    const cached = peekCompetitorsBaseCache();
+    if (cached) {
+      setCompetitors(cached.competitors as CompetitorAccount[]);
+      setVideos(cached.videos as CompetitorVideoRow[]);
+      setVisibleCount(8);
+      setLoading(false);
+    }
 
     async function loadBase() {
       try {
-        const [competitorsRes, videosRes] = await Promise.all([
-          fetch("/api/competitors", { cache: "no-store" }),
-          fetch("/api/competitors/videos", { cache: "no-store" }),
-        ]);
-        const competitorsData = (await competitorsRes.json()) as { competitors?: CompetitorAccount[] };
-        const videosData = (await videosRes.json()) as { videos?: CompetitorVideo[] };
+        const data = await fetchCompetitorsBase();
         if (cancelled) return;
-        setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
-        setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
+        setCompetitors(data.competitors as CompetitorAccount[]);
+        setVideos(data.videos as CompetitorVideoRow[]);
         setVisibleCount(8);
+        void prefetchCompetitorsBase();
       } catch {
         if (cancelled) return;
-        setCompetitors([]);
-        setVideos([]);
+        if (!cached) {
+          setCompetitors([]);
+          setVideos([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
+    void loadBase();
+
     void (async () => {
-      await loadBase();
       if (cancelled) return;
       setDailySyncing(true);
       setDailySyncHint(null);
@@ -275,7 +295,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
         setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
         setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
       } catch {
-        // оставляем данные первого запроса
+        /* keep first paint data */
       } finally {
         if (!cancelled) setDailySyncing(false);
       }
@@ -284,7 +304,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [active]);
 
   async function onAddCompetitor() {
     const detected = detectCompetitorPlatform(competitorInput);
@@ -633,10 +653,7 @@ export function CompetitorSpySection({ onVideoClick }: CompetitorSpySectionProps
           {loading ? (
             <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="aspect-[3/4] w-full animate-pulse rounded-3xl bg-zinc-200/90 shadow-sm ring-1 ring-zinc-900/5"
-                />
+                <div key={i} className={SKELETON_CARD_CLASS} />
               ))}
             </div>
           ) : latestVideos.length === 0 ? (

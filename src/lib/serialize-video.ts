@@ -1,4 +1,5 @@
 import type { Video } from "@prisma/client";
+import type { VideoHomeCardRow, VideoTrendPreviewRow } from "@/lib/prisma-video-select";
 import { videoClientId } from "@/lib/video-client-id";
 import { formatAgeCompactRu, formatRelativeRu, formatViewsCount } from "@/lib/format-video";
 
@@ -53,14 +54,46 @@ export function videoToClientJson(v: Video) {
   };
 }
 
+/** Карточка главной / сетки — без transcript и тяжёлых полей. */
+export function videoToHomeCardJson(v: VideoHomeCardRow) {
+  const id = videoClientId(v.platform, v.externalId);
+  const ratingVal = Math.min(99, Math.max(0, v.rating > 0 ? v.rating : v.score));
+  const thumb =
+    v.thumbnailUrl?.trim() ||
+    (v.platform === "youtube" ? `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg` : "");
+  const channel = v.channelTitle ?? v.authorDisplayName ?? v.authorUsername ?? "—";
+  return {
+    id,
+    platform: v.platform as "youtube" | "instagram",
+    externalId: v.externalId,
+    youtubeId: v.platform === "youtube" ? v.externalId : null,
+    title: v.title,
+    channel,
+    authorUsername: v.authorUsername,
+    views: formatViewsCount(v.views),
+    likes: formatViewsCount(v.likes),
+    publishedAt: formatRelativeRu(v.publishedAt),
+    publishedAtIso: v.publishedAt.toISOString(),
+    ageCompact: formatAgeCompactRu(v.publishedAt),
+    viralScore: Math.round(v.viralScore * 100) / 100,
+    rating: ratingVal,
+    score: ratingVal,
+    viralLabel: viralLabelFromRating(ratingVal),
+    thumbnailUrl: thumb,
+    url: v.url,
+    videoUrl: v.videoUrl,
+  };
+}
+
 /** Компактная запись для левой колонки «тренды». */
-export function videoToTrendingJson(v: Video) {
+export function videoToTrendingJson(v: VideoTrendPreviewRow) {
   const id = videoClientId(v.platform, v.externalId);
   const thumb =
     v.thumbnailUrl?.trim() ||
     (v.platform === "youtube" ? `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg` : "");
   return {
     id,
+    platform: v.platform,
     title: v.title,
     views: formatViewsCount(v.views),
     thumbnailUrl: thumb,

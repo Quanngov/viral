@@ -14,6 +14,9 @@ import { useToast } from "@/components/dashboard/ToastContext";
 import type { GridVideo } from "@/lib/mock-data";
 import { gridVideoToSavePayload, type SaveVideoSourceType } from "@/lib/saved-video-mapper";
 import { parseVideoClientId } from "@/lib/video-client-id";
+import { invalidateCached } from "@/lib/client-fetch-cache";
+import { CACHE_KEYS, loadSavedMap } from "@/lib/dashboard-fetch";
+import { peekCached } from "@/lib/client-fetch-cache";
 
 type SavedMap = Record<string, boolean>;
 
@@ -34,24 +37,8 @@ type SavedVideosContextValue = {
 
 const SavedVideosContext = createContext<SavedVideosContextValue | null>(null);
 
-async function fetchSavedMap(): Promise<SavedMap> {
-  try {
-    const res = await fetch("/api/saved-videos", { cache: "no-store" });
-    if (!res.ok) return {};
-    const data = (await res.json()) as {
-      success?: boolean;
-      error?: string;
-      videos?: { platform: string; externalId: string }[];
-    };
-    if (data.error && !data.videos) return {};
-    const next: SavedMap = {};
-    for (const v of data.videos ?? []) {
-      next[`${v.platform}:${v.externalId}`] = true;
-    }
-    return next;
-  } catch {
-    return {};
-  }
+function toSavedMap(raw: Record<string, boolean>): SavedMap {
+  return raw;
 }
 
 export function SavedVideosProvider({ children }: { children: ReactNode }) {
@@ -64,15 +51,17 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     mounted.current = true;
+    const cached = peekCached<Record<string, boolean>>(CACHE_KEYS.savedMap, 300_000, true);
+    if (cached) setSavedMap(toSavedMap(cached));
     return () => {
       mounted.current = false;
     };
   }, []);
 
   const refreshFromServer = useCallback(async () => {
-    const next = await fetchSavedMap();
+    const { data: next } = await loadSavedMap();
     if (!mounted.current) return;
-    setSavedMap(next);
+    setSavedMap(toSavedMap(next));
   }, []);
 
   const markRemovedFromSavedList = useCallback((clientId: string) => {
@@ -151,6 +140,7 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
           );
           if (!res.ok) throw new Error("delete_failed");
           markRemovedFromSavedList(clientId);
+          invalidateCached(CACHE_KEYS.savedList);
           showToast("Ролик удален из сохраненных", "ok");
         } else {
           const payload = gridVideoToSavePayload(video, opts);
@@ -161,6 +151,7 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify(payload),
           });
           if (!res.ok) throw new Error("post_failed");
+          invalidateCached(CACHE_KEYS.savedList);
           showToast("Ролик сохранен", "ok");
         }
         return true;

@@ -1,11 +1,14 @@
 "use client";
 
 import { FilePenLine } from "lucide-react";
-import { useState, type ReactNode } from "react";
-import type { MockUser } from "@/lib/mock-data";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useAuthDisplay } from "@/hooks/use-auth-display";
 import { AccountPanel, type AccountPanelTab } from "@/components/dashboard/AccountPanel";
-import { MockAuthModal, MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
+import { AuthModal, type AuthModalMode } from "@/components/dashboard/AuthModal";
+import { MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
+import { useCountUp } from "@/hooks/use-count-up";
 import { formatTokensRuSpace } from "@/lib/format-metrics";
+import { loadTokenBalance } from "@/lib/dashboard-fetch";
 
 export type DashboardView = "home" | "competitors" | "saved" | "scripts";
 
@@ -70,7 +73,6 @@ const tools: { key: string; label: string; view?: DashboardView; soon?: boolean;
 const SERVICE_NAME = "TrendRadar";
 
 type UserPanelProps = {
-  user: MockUser;
   activeView: DashboardView;
   onChangeView: (view: DashboardView) => void;
   layout?: "sidebar" | "bottom-nav";
@@ -82,36 +84,41 @@ const accountModals = (
     accountPanelTab: AccountPanelTab;
     setAccountPanelTab: (tab: AccountPanelTab) => void;
     setAccountPanelOpen: (open: boolean) => void;
-    user: MockUser;
     authOpen: boolean;
-    authMode: "login" | "logout";
+    authMode: AuthModalMode;
     setAuthOpen: (open: boolean) => void;
     serviceMenuOpen: boolean;
     setServiceMenuOpen: (open: boolean) => void;
-    setAuthMode: (mode: "login" | "logout") => void;
+    setAuthMode: (mode: AuthModalMode) => void;
+    onAuthSuccess: () => void;
+    showAuthed: boolean;
+    displayEmail: string;
+    displayTokens: number;
   },
 ) => (
   <>
-    <AccountPanel
-      open={props.accountPanelOpen}
-      activeTab={props.accountPanelTab}
-      onTabChange={props.setAccountPanelTab}
-      onClose={() => props.setAccountPanelOpen(false)}
-      email={props.user.email}
-      plan={props.user.plan}
-      balanceTokens={props.user.tokens}
-      onLogin={() => {
-        props.setAccountPanelOpen(false);
-        props.setAuthMode("login");
-        props.setAuthOpen(true);
-      }}
-      onLogout={() => {
-        props.setAccountPanelOpen(false);
-        props.setAuthMode("logout");
-        props.setAuthOpen(true);
-      }}
+    {props.showAuthed ? (
+      <AccountPanel
+        open={props.accountPanelOpen}
+        activeTab={props.accountPanelTab}
+        onTabChange={props.setAccountPanelTab}
+        onClose={() => props.setAccountPanelOpen(false)}
+        email={props.displayEmail}
+        plan="Pro"
+        balanceTokens={props.displayTokens}
+        onLogout={() => {
+          props.setAccountPanelOpen(false);
+          props.setAuthMode("logout");
+          props.setAuthOpen(true);
+        }}
+      />
+    ) : null}
+    <AuthModal
+      open={props.authOpen}
+      onClose={() => props.setAuthOpen(false)}
+      mode={props.authMode}
+      onSuccess={props.onAuthSuccess}
     />
-    <MockAuthModal open={props.authOpen} onClose={() => props.setAuthOpen(false)} mode={props.authMode} />
     <MockSimpleInfoModal
       open={props.serviceMenuOpen}
       onClose={() => props.setServiceMenuOpen(false)}
@@ -121,31 +128,103 @@ const accountModals = (
   </>
 );
 
-export function UserPanel({ user, activeView, onChangeView, layout = "sidebar" }: UserPanelProps) {
+export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: UserPanelProps) {
+  const { showAuthed, showGuest, showAuthPlaceholder, sessionLoading, displayEmail } =
+    useAuthDisplay();
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
   const [accountPanelTab, setAccountPanelTab] = useState<AccountPanelTab>("profile");
   const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "logout">("login");
+  const [authMode, setAuthMode] = useState<AuthModalMode>("login");
   const [serviceMenuOpen, setServiceMenuOpen] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [balanceLoaded, setBalanceLoaded] = useState(false);
+
+  const refreshBalance = useCallback(async () => {
+    try {
+      const { data: next } = await loadTokenBalance();
+      if (next !== null) {
+        setBalance(next);
+        setBalanceLoaded(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshBalance();
+  }, [refreshBalance]);
+
+  useEffect(() => {
+    if (showAuthed && !sessionLoading) void refreshBalance();
+  }, [showAuthed, sessionLoading, displayEmail, refreshBalance]);
+
+  const onAuthSuccess = useCallback(() => {
+    void refreshBalance();
+  }, [refreshBalance]);
 
   const openAccountPanel = (tab: AccountPanelTab) => {
+    if (!showAuthed) {
+      setAuthMode("login");
+      setAuthOpen(true);
+      return;
+    }
     setAccountPanelTab(tab);
     setAccountPanelOpen(true);
   };
+
+  const openAuth = (mode: AuthModalMode) => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  };
+
+  const displayTokens = useCountUp(balance, {
+    animate: balanceLoaded && balance > 0,
+  });
+  const authFade = sessionLoading ? "opacity-60" : "opacity-100";
 
   const modalProps = {
     accountPanelOpen,
     accountPanelTab,
     setAccountPanelTab,
     setAccountPanelOpen,
-    user,
     authOpen,
     authMode,
     setAuthOpen,
     serviceMenuOpen,
     setServiceMenuOpen,
     setAuthMode,
+    onAuthSuccess,
+    showAuthed,
+    displayEmail,
+    displayTokens,
   };
+
+  const authPlaceholder = (
+    <div className="mb-2 hidden min-h-[2.5rem] flex-row gap-2 lg:flex" aria-hidden>
+      <div className="skeleton-breathe flex-1 rounded-lg" />
+      <div className="skeleton-breathe flex-1 rounded-lg" />
+    </div>
+  );
+
+  const guestAuthButtons = (
+    <div className="dashboard-fade-in mb-2 hidden flex-row gap-2 lg:flex">
+      <button
+        type="button"
+        onClick={() => openAuth("login")}
+        className="dashboard-ease flex-1 rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+      >
+        Войти
+      </button>
+      <button
+        type="button"
+        onClick={() => openAuth("signup")}
+        className="dashboard-ease flex-1 rounded-lg border border-zinc-200 bg-white py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+      >
+        Регистрация
+      </button>
+    </div>
+  );
 
   if (layout === "bottom-nav") {
     return (
@@ -180,13 +259,22 @@ export function UserPanel({ user, activeView, onChangeView, layout = "sidebar" }
   return (
     <aside className="shrink-0 bg-transparent px-0 pb-0 pt-0">
       <div className="flex flex-col rounded-xl bg-white p-3 shadow-sm shadow-zinc-900/5 lg:flex-col">
-        <p className="mb-2 hidden truncate text-xs font-medium text-zinc-500 lg:block">{user.email}</p>
-        <div className="hidden items-start gap-2 lg:flex">
+        {showAuthPlaceholder ? authPlaceholder : null}
+        {showGuest ? guestAuthButtons : null}
+        {showAuthed ? (
+          <p
+            className={`dashboard-ease mb-2 hidden truncate text-xs font-medium text-zinc-500 lg:block ${authFade}`}
+          >
+            {displayEmail}
+          </p>
+        ) : null}
+        {showAuthed ? (
+        <div className={`dashboard-ease hidden items-start gap-2 lg:flex ${authFade}`}>
           <div className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm shadow-emerald-900/5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold tracking-tight text-emerald-900">{user.plan}</span>
+              <span className="text-sm font-semibold tracking-tight text-emerald-900">Pro</span>
               <span className="flex items-center gap-1 text-lg font-bold tabular-nums tracking-tight text-emerald-900">
-                {formatTokensRuSpace(user.tokens)}
+                {formatTokensRuSpace(displayTokens)}
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
                   <path
                     d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
@@ -210,8 +298,10 @@ export function UserPanel({ user, activeView, onChangeView, layout = "sidebar" }
             </svg>
           </button>
         </div>
+        ) : null}
 
-        <div className="mt-2 hidden grid-cols-2 gap-2 lg:grid">
+        {showAuthed ? (
+        <div className={`dashboard-ease mt-2 hidden grid-cols-2 gap-2 lg:grid ${authFade}`}>
           <button
             type="button"
             onClick={() => openAccountPanel("settings")}
@@ -236,6 +326,7 @@ export function UserPanel({ user, activeView, onChangeView, layout = "sidebar" }
             </button>
           </div>
         </div>
+        ) : null}
 
         {/* Desktop navigation */}
         <nav className="mt-2 hidden flex-col gap-0 border-t border-zinc-100 pt-1.5 lg:flex">

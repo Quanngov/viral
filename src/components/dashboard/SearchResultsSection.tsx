@@ -12,12 +12,17 @@ import {
   type SearchGridFilters,
 } from "@/components/dashboard/search-results-utils";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
+import { VideoGridSkeleton } from "@/components/dashboard/DashboardSkeletons";
+import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
+import { fetchHomeVideoCountLazy, fetchHomeVideos } from "@/lib/dashboard-fetch";
+import { filterDisplayableVideos } from "@/lib/grid-video-display";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 import { useToast } from "@/components/dashboard/ToastContext";
 import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
 
 type SearchResultsSectionProps = {
   searchCost: number;
+  initialHome: DashboardInitialPayload;
   onVideoClick?: (video: GridVideo) => void;
 };
 
@@ -27,12 +32,14 @@ type FeedSession = {
   locale: string;
 };
 
-export function SearchResultsSection({ searchCost, onVideoClick }: SearchResultsSectionProps) {
+export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: SearchResultsSectionProps) {
   const { showToast } = useToast();
   const { hydrateForVideos, lastError, clearError } = useSavedVideos();
-  const [sourceVideos, setSourceVideos] = useState<GridVideo[]>([]);
+  const [sourceVideos, setSourceVideos] = useState<GridVideo[]>(() =>
+    filterDisplayableVideos(initialHome.homeVideos),
+  );
   const [loading, setLoading] = useState(false);
-  const [boot, setBoot] = useState(true);
+  const [homeReady, setHomeReady] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [, setTokensRemaining] = useState<number | null>(null);
@@ -64,35 +71,32 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
   }, [sourceVideos, hydrateForVideos]);
 
   useEffect(() => {
-    let cancel = false;
-    async function loadHome() {
-      try {
-        const [homeRes, tokRes] = await Promise.all([
-          fetch("/api/videos/home?limit=50"),
-          fetch("/api/tokens"),
-        ]);
-        const data = (await homeRes.json()) as {
-          videos?: GridVideo[];
-          totalCount?: number;
-        };
-        const tok = (await tokRes.json()) as { balance?: number };
-        if (!cancel) {
-          setSourceVideos(Array.isArray(data.videos) ? data.videos : []);
-          setTotalCount(typeof data.totalCount === "number" ? data.totalCount : 0);
-          if (typeof tok.balance === "number") setTokensRemaining(tok.balance);
+    let alive = true;
+    const timerId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const { videos } = await fetchHomeVideos(24);
+          if (!alive) return;
+          const valid = filterDisplayableVideos(videos);
+          if (valid.length > 0) {
+            setSourceVideos(valid);
+          }
+        } catch {
+          /* keep SSR batch */
         }
-      } catch {
-        if (!cancel) {
-          setSourceVideos([]);
-          setTotalCount(0);
+        if (!alive) return;
+        try {
+          const count = await fetchHomeVideoCountLazy();
+          if (count !== null) setTotalCount(count);
+        } catch {
+          /* stats optional */
         }
-      } finally {
-        if (!cancel) setBoot(false);
-      }
-    }
-    loadHome();
+      })();
+    }, 300);
+
     return () => {
-      cancel = true;
+      alive = false;
+      window.clearTimeout(timerId);
     };
   }, []);
 
@@ -128,6 +132,7 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
     setLoading(true);
     setError(null);
     setNoMore(false);
+    setSourceVideos([]);
 
     // Анимация поиска
     setSearchSteps({ step1: "active", step2: "pending", step3: "pending" });
@@ -268,11 +273,12 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
     });
   }, []);
 
-  const busy = loading || boot;
+  const isSearchMode = Boolean(session);
+  const showGridSkeleton = isSearchMode ? loading : !homeReady;
   const displayedVideos = videos;
-  const showLoadMore = Boolean(session) && !busy && !noMore;
-  const showHomeEmpty = !boot && !session && displayedVideos.length === 0 && !busy;
-  const showSearchEmpty = Boolean(session) && !busy && displayedVideos.length === 0;
+  const showLoadMore = Boolean(session) && !loading && homeReady && !noMore;
+  const showHomeEmpty = homeReady && !session && displayedVideos.length === 0;
+  const showSearchEmpty = homeReady && session && !loading && displayedVideos.length === 0;
 
   const statsParts: string[] = [];
   if (totalCount !== null) {
@@ -323,11 +329,11 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
         </div>
       ) : null}
 
-      {!boot && noMore && session && videos.length === 0 ? (
+      {homeReady && noMore && session && videos.length === 0 ? (
         <p className="text-sm text-zinc-600">Пока больше роликов нет.</p>
       ) : null}
 
-      {!boot && statsParts.length > 0 ? (
+      {homeReady && statsParts.length > 0 ? (
         <p className="text-xs text-zinc-600">{statsParts.join(" • ")}</p>
       ) : null}
 
@@ -347,18 +353,18 @@ export function SearchResultsSection({ searchCost, onVideoClick }: SearchResults
         </div>
       ) : (
         <>
-          <VideoGrid
-            videos={displayedVideos}
-            loading={busy}
-            onVideoClick={onVideoClick}
-          />
+          {showGridSkeleton ? (
+            <VideoGridSkeleton count={8} />
+          ) : (
+            <VideoGrid videos={displayedVideos} onVideoClick={onVideoClick} />
+          )}
           {showLoadMore ? (
             <div className="mt-1 flex justify-center">
               <button
                 type="button"
                 onClick={loadMore}
                 className="inline-flex min-h-[2.75rem] min-w-[10.5rem] items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-50"
-                disabled={loading || boot}
+                disabled={loading || !homeReady}
               >
                 <LightningIcon className="h-4 w-4 shrink-0 text-emerald-100" />
                 <span className="tabular-nums">{searchCost}</span>

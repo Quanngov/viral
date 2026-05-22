@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SavedVideo } from "@prisma/client";
 import type { GridVideo } from "@/lib/mock-data";
 import { savedVideoToGridVideo } from "@/lib/saved-video-mapper";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
+import { VideoGridSkeleton } from "@/components/dashboard/DashboardSkeletons";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
+import { loadSavedVideosList, peekSavedListCache } from "@/lib/dashboard-fetch";
 
 type SavedVideosSectionProps = {
   isActive: boolean;
@@ -14,34 +16,39 @@ type SavedVideosSectionProps = {
 
 export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectionProps) {
   const [rows, setRows] = useState<SavedVideo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const { savedCount, clearSavedListOptimisticRemovals, isOptimisticallyRemovedFromSavedList } = useSavedVideos();
-  const loggedOpenRef = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const { savedCount, clearSavedListOptimisticRemovals, isOptimisticallyRemovedFromSavedList } =
+    useSavedVideos();
 
   useEffect(() => {
-    if (!isActive) {
-      loggedOpenRef.current = false;
-      return;
-    }
     let cancelled = false;
-    (async () => {
-      setLoading(true);
-      const log = !loggedOpenRef.current;
-      loggedOpenRef.current = true;
+
+    const cached = peekSavedListCache();
+    const hasCache = Boolean(cached?.videos?.length);
+    if (hasCache) {
+      setRows(cached!.videos as SavedVideo[]);
+      setLoading(false);
+    }
+
+    if (!isActive) return;
+
+    const silent = hasCache;
+
+    async function refresh() {
+      if (!silent) setLoading(true);
       try {
-        const q = log ? "?log=1" : "";
-        const res = await fetch(`/api/saved-videos${q}`, { cache: "no-store" });
-        const data = (await res.json()) as { videos?: SavedVideo[] };
-        if (!cancelled) {
-          setRows(Array.isArray(data.videos) ? data.videos : []);
-          clearSavedListOptimisticRemovals();
-        }
+        const { data } = await loadSavedVideosList();
+        if (cancelled) return;
+        setRows(data.videos as SavedVideo[]);
+        clearSavedListOptimisticRemovals();
       } catch {
-        if (!cancelled) setRows([]);
+        if (!cancelled && !silent) setRows([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
+    }
+
+    void refresh();
     return () => {
       cancelled = true;
     };
@@ -59,7 +66,7 @@ export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectio
       });
   }, [rows, isOptimisticallyRemovedFromSavedList]);
 
-  if (!isActive) return null;
+  const showSkeleton = loading && gridVideos.length === 0;
 
   return (
     <section className="min-w-0 px-6 pt-5">
@@ -71,27 +78,22 @@ export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectio
         Сохранено: <span className="tabular-nums text-emerald-800">{savedCount}</span>
       </p>
 
-      {loading ? (
-        <div className="mt-6">
-          <VideoGrid videos={[]} loading onVideoClick={onVideoClick} cardVariant="detailed" />
-        </div>
-      ) : gridVideos.length === 0 ? (
-        <div className="mt-8 rounded-2xl border border-dashed border-zinc-200 bg-white/80 px-6 py-16 text-center shadow-sm shadow-zinc-900/5">
-          <p className="text-base font-semibold text-zinc-800">Вы пока не сохранили ни одного ролика</p>
-          <p className="mt-2 text-sm leading-relaxed text-zinc-600">
-            Сохраняйте ролики из поиска или шпиона, чтобы быстро возвращаться к ним и использовать в сценариях.
-          </p>
-        </div>
-      ) : (
-        <div className="mt-6 min-w-0">
-          <VideoGrid
-            videos={gridVideos}
-            loading={false}
-            onVideoClick={onVideoClick}
-            cardVariant="detailed"
-          />
-        </div>
-      )}
+      <div className="mt-6">
+        {showSkeleton ? (
+          <VideoGridSkeleton count={8} />
+        ) : gridVideos.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-200 bg-white/80 px-6 py-16 text-center shadow-sm shadow-zinc-900/5">
+            <p className="text-base font-semibold text-zinc-800">Вы пока не сохранили ни одного ролика</p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              Сохраняйте ролики из поиска или шпиона, чтобы быстро возвращаться к ним и использовать в сценариях.
+            </p>
+          </div>
+        ) : (
+          <div className="dashboard-fade-in min-w-0">
+            <VideoGrid videos={gridVideos} onVideoClick={onVideoClick} cardVariant="detailed" />
+          </div>
+        )}
+      </div>
     </section>
   );
 }

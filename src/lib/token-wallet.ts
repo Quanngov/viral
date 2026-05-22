@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
+import { auth } from "@/auth";
+import { linkAuthUserToSessionUser } from "@/lib/auth-bridge";
 import { logAdminEvent } from "@/lib/admin-events";
 import { prisma } from "@/lib/prisma";
 
@@ -17,7 +19,29 @@ function isValidSessionKey(raw: string | undefined): raw is string {
  * Гарантирует httpOnly cookie с session id и строку SessionUser в БД.
  * Баланс хранится только в UserTokenBalance.
  */
+async function ensureBalance(userId: string) {
+  const row = await prisma.userTokenBalance.findUnique({ where: { userId } });
+  if (!row) {
+    await prisma.userTokenBalance.create({
+      data: { userId, balance: DEFAULT_BALANCE },
+    });
+  }
+}
+
 export async function ensureSessionUser(): Promise<{ userId: string; sessionKey: string }> {
+  const authSession = await auth();
+  const authUserId = authSession?.user?.id;
+
+  if (authUserId) {
+    const appUserId = await linkAuthUserToSessionUser(authUserId);
+    const user = await prisma.sessionUser.findUniqueOrThrow({
+      where: { id: appUserId },
+      select: { id: true, sessionKey: true },
+    });
+    await ensureBalance(user.id);
+    return { userId: user.id, sessionKey: user.sessionKey };
+  }
+
   const jar = await cookies();
   let sessionKey = jar.get(SESSION_COOKIE)?.value?.trim();
 

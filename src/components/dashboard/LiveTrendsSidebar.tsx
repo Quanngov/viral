@@ -1,53 +1,26 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { GridVideo } from "@/lib/mock-data";
+import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
+import { loadRealtimeTrends } from "@/lib/dashboard-fetch";
+import { mapTrendsPayload, type LiveTrendVideo } from "@/lib/trends-display";
+import {
+  MobileTrendCardSkeleton,
+  TrendRowSkeletonList,
+} from "@/components/dashboard/DashboardSkeletons";
 import { LiveTrendItem } from "./LiveTrendItem";
 
-type TrendVideo = {
-  id: string;
-  title: string;
-  thumbnailUrl?: string;
-  views: number;
-  platform: string;
-  authorUsername?: string;
-  authorDisplayName?: string;
-  url: string;
-  rating: number;
-  likes?: number;
-  publishedAt?: string;
-  viralScore?: number;
-};
-
-type TrendItem = {
-  id: string;
-  video: TrendVideo;
-  trendScore: number;
-  reason?: string;
-  source?: string;
-  publishedAt?: string;
-  detectedAt: string;
-};
-
-type LiveTrendVideo = {
-  id: string;
-  title: string;
-  thumbnailUrl: string;
-  views: string;
-  platform: string;
-  isNew?: boolean;
-};
-
 type LiveTrendsSidebarProps = {
+  initial: DashboardInitialPayload;
   onVideoClick?: (video: GridVideo) => void;
   variant?: "sidebar" | "mobile-horizontal";
 };
 
-const POLLING_INTERVAL = 50000;
+const POLLING_INTERVAL = 50_000;
 const LAZY_REFRESH_SESSION_KEY = "viral_trends_lazy_refresh_v1";
 
-/** One lazy-refresh per tab session (survives Strict Mode remount). */
 let lazyRefreshInFlight: Promise<void> | null = null;
 
 function runLazyRefreshOnce(): void {
@@ -96,68 +69,32 @@ function useIsLargeScreen() {
   );
 }
 
-function useLiveTrends(enabled: boolean) {
-  const [trends, setTrends] = useState<LiveTrendVideo[]>([]);
-  const [loaded, setLoaded] = useState(false);
+function useLiveTrends(enabled: boolean, ssrTrends: LiveTrendVideo[]) {
+  const [trends, setTrends] = useState<LiveTrendVideo[]>(ssrTrends);
+  const [loaded, setLoaded] = useState(true);
   const [error, setError] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const mountedRef = useRef(true);
   const fetchInFlightRef = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const lastFetchAtRef = useRef(0);
 
-  const fetchTrends = useCallback(async () => {
+  const fetchTrends = useCallback(async (opts?: { silent?: boolean }) => {
+    const now = Date.now();
     if (fetchInFlightRef.current) return;
-    fetchInFlightRef.current = true;
+    if (!opts?.silent && now - lastFetchAtRef.current < 3_000) return;
 
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
+    fetchInFlightRef.current = true;
+    lastFetchAtRef.current = now;
 
     try {
-      const response = await fetch("/api/trends/realtime?limit=10", {
-        signal: ac.signal,
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (!mountedRef.current || ac.signal.aborted) return;
-
-      if (data.error) {
-        throw new Error(data.message || "API error");
-      }
-
-      const trendItems = Array.isArray(data.trends) ? data.trends : [];
-      const newItems = Array.isArray(data.newItems) ? data.newItems : [];
-
-      const liveTrends: LiveTrendVideo[] = trendItems.map((item: TrendItem, index: number) => {
-        const isNew = newItems.some((newItem: { id: string }) => newItem.id === item.id);
-        const viewsRaw = item.video?.views;
-        const viewsNum =
-          typeof viewsRaw === "number"
-            ? viewsRaw
-            : typeof viewsRaw === "string"
-              ? Number(String(viewsRaw).replace(/\s/g, "")) || 0
-              : 0;
-        return {
-          id: item.video.id,
-          title: item.video.title,
-          thumbnailUrl: item.video.thumbnailUrl || "",
-          views: viewsNum.toLocaleString("ru-RU"),
-          platform: item.video.platform,
-          isNew: isNew && index < 3,
-        };
-      });
-
-      setTrends(liveTrends);
+      const { data } = await loadRealtimeTrends();
+      if (!mountedRef.current) return;
+      setTrends(mapTrendsPayload(data));
       setError(false);
       setLoaded(true);
     } catch (err) {
-      if (ac.signal.aborted) return;
-      console.error("Failed to fetch trends:", err);
       if (!mountedRef.current) return;
+      console.error("Failed to fetch trends:", err);
       setError(true);
       setLoaded(true);
     } finally {
@@ -166,13 +103,10 @@ function useLiveTrends(enabled: boolean) {
   }, []);
 
   const startPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
+    if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       if (document.hidden) return;
-      fetchTrends();
+      void fetchTrends({ silent: true });
     }, POLLING_INTERVAL);
   }, [fetchTrends]);
 
@@ -189,36 +123,29 @@ function useLiveTrends(enabled: boolean) {
       if (document.hidden) {
         stopPolling();
       } else {
-        fetchTrends();
+        void fetchTrends({ silent: true });
         startPolling();
       }
     };
-
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [enabled, fetchTrends, startPolling, stopPolling]);
 
   useEffect(() => {
     if (!enabled) return;
     mountedRef.current = true;
 
-    runLazyRefreshOnce();
-    void fetchTrends();
-
-    if (!document.hidden) {
-      startPolling();
-    }
-
+    void fetchTrends({ silent: true }).then(() => {
+      runLazyRefreshOnce();
+    });
+    if (!document.hidden) startPolling();
     return () => {
       mountedRef.current = false;
-      abortRef.current?.abort();
       stopPolling();
     };
   }, [enabled, fetchTrends, startPolling, stopPolling]);
 
-  return { trends, loaded, error };
+  return { trends, loaded, error, showSkeleton: false };
 }
 
 function TrendsHeader() {
@@ -235,10 +162,19 @@ function TrendsHeader() {
   );
 }
 
-function TrendsStatus({ loaded, error, empty }: { loaded: boolean; error: boolean; empty: boolean }) {
-  if (!loaded) {
-    return <p className="px-2 py-4 text-center text-[11px] text-zinc-400">Загрузка…</p>;
-  }
+function TrendsStatus({
+  loaded,
+  error,
+  empty,
+  showSkeleton,
+}: {
+  loaded: boolean;
+  error: boolean;
+  empty: boolean;
+  showSkeleton: boolean;
+}) {
+  if (showSkeleton) return null;
+  if (!loaded) return null;
   if (error) {
     return (
       <p className="px-2 py-4 text-center text-[11px] leading-relaxed text-zinc-500">
@@ -259,9 +195,11 @@ function TrendsStatus({ loaded, error, empty }: { loaded: boolean; error: boolea
 function MobileTrendCard({
   video,
   onClick,
+  priority,
 }: {
   video: LiveTrendVideo;
   onClick: () => void;
+  priority?: boolean;
 }) {
   return (
     <li className="relative w-[min(260px,75vw)] shrink-0 snap-start">
@@ -272,7 +210,16 @@ function MobileTrendCard({
       >
         <div className="relative aspect-[4/5] w-full bg-zinc-100">
           {video.thumbnailUrl ? (
-            <Image src={video.thumbnailUrl} alt="" fill sizes="260px" className="object-cover" />
+            <Image
+              src={video.thumbnailUrl}
+              alt=""
+              fill
+              sizes="260px"
+              className="object-cover"
+              priority={priority}
+              loading={priority ? undefined : "lazy"}
+              decoding="async"
+            />
           ) : null}
         </div>
         <div className="flex flex-1 flex-col gap-1 p-2.5">
@@ -289,11 +236,12 @@ function MobileTrendCard({
   );
 }
 
-export function LiveTrendsSidebar({ onVideoClick, variant = "sidebar" }: LiveTrendsSidebarProps) {
+export function LiveTrendsSidebar({ initial, onVideoClick, variant = "sidebar" }: LiveTrendsSidebarProps) {
   const isLg = useIsLargeScreen();
   const isMobileHorizontal = variant === "mobile-horizontal";
   const shouldFetch = isMobileHorizontal ? !isLg : isLg;
-  const { trends, loaded, error } = useLiveTrends(shouldFetch);
+  const ssrTrends = useMemo(() => mapTrendsPayload(initial.trends), [initial.trends]);
+  const { trends, loaded, error, showSkeleton } = useLiveTrends(shouldFetch, ssrTrends);
 
   if (isMobileHorizontal) {
     if (isLg) return null;
@@ -309,14 +257,22 @@ export function LiveTrendsSidebar({ onVideoClick, variant = "sidebar" }: LiveTre
           </div>
         </header>
         <div className="scrollbar-hidden -mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-0.5">
-          <TrendsStatus loaded={loaded} error={error} empty={trends.length === 0} />
-          {trends.map((video) => (
-            <MobileTrendCard
-              key={video.id}
-              video={video}
-              onClick={() => onVideoClick?.(toGridVideo(video))}
-            />
-          ))}
+          {showSkeleton
+            ? Array.from({ length: 4 }).map((_, i) => <MobileTrendCardSkeleton key={i} />)
+            : null}
+          {!showSkeleton ? (
+            <TrendsStatus loaded={loaded} error={error} empty={trends.length === 0} showSkeleton={false} />
+          ) : null}
+          {!showSkeleton
+            ? trends.map((video, index) => (
+                <MobileTrendCard
+                  key={video.id}
+                  video={video}
+                  priority={index < 2}
+                  onClick={() => onVideoClick?.(toGridVideo(video))}
+                />
+              ))
+            : null}
         </div>
       </section>
     );
@@ -328,8 +284,11 @@ export function LiveTrendsSidebar({ onVideoClick, variant = "sidebar" }: LiveTre
     <div className="flex h-full min-h-0 flex-col rounded-xl bg-transparent">
       <TrendsHeader />
       <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-0.5">
-        <TrendsStatus loaded={loaded} error={error} empty={trends.length === 0} />
-        {trends.length > 0 ? (
+        {showSkeleton ? <TrendRowSkeletonList count={8} /> : null}
+        {!showSkeleton ? (
+          <TrendsStatus loaded={loaded} error={error} empty={trends.length === 0} showSkeleton={false} />
+        ) : null}
+        {!showSkeleton && trends.length > 0 ? (
           <ul className="flex flex-col gap-2 px-1">
             {trends.map((video) => (
               <li key={video.id} className="relative">

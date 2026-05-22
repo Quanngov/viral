@@ -1,7 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { CompetitorSpySection } from "@/components/dashboard/CompetitorSpySection";
 import { LiveTrendsSidebar } from "@/components/dashboard/LiveTrendsSidebar";
@@ -11,123 +10,123 @@ import { SavedVideosSection } from "@/components/dashboard/SavedVideosSection";
 import { SearchResultsSection } from "@/components/dashboard/SearchResultsSection";
 import { VideoDetailPanel } from "@/components/dashboard/VideoDetailPanel";
 import { ScriptsSection } from "@/components/dashboard/ScriptsSection";
+import { AuthSessionProvider } from "@/components/dashboard/AuthSessionProvider";
 import { UserPanel, type DashboardView } from "@/components/dashboard/UserPanel";
+import { DashboardTabPanel } from "@/components/dashboard/DashboardTabPanel";
 import { WeeklyTrendsSection } from "@/components/dashboard/WeeklyTrendsSection";
+import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import type { GridVideo } from "@/lib/mock-data";
-import { mockUser, mockWeeklyTrends } from "@/lib/mock-data";
+import { mockWeeklyTrends } from "@/lib/mock-data";
+import {
+  loadSavedMap,
+  loadSavedVideosList,
+  loadTokenBalance,
+  prefetchCompetitorsBase,
+  seedDashboardFromSsr,
+} from "@/lib/dashboard-fetch";
+import { readViewFromLocation, replaceDashboardTabUrl } from "@/lib/dashboard-tab-url";
 
-function tabQueryToView(tab: string | null): DashboardView {
-  if (tab === "competitors") return "competitors";
-  if (tab === "saved") return "saved";
-  if (tab === "scripts") return "scripts";
-  if (tab === "search") return "home";
-  return "home";
-}
+const VALID_TABS = new Set(["home", "competitors", "saved", "search", "scripts"]);
 
-function viewToTabQuery(view: DashboardView): string {
-  if (view === "competitors") return "competitors";
-  if (view === "saved") return "saved";
-  if (view === "scripts") return "scripts";
-  return "home";
-}
-
-function HomeDashboardInner() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
+  const [activeView, setActiveViewState] = useState<DashboardView>("home");
   const [weeklyOpen, setWeeklyOpen] = useState(true);
   const [selectedVideo, setSelectedVideo] = useState<GridVideo | null>(null);
 
-  const activeView = useMemo(() => tabQueryToView(searchParams.get("tab")), [searchParams]);
-
-  const setActiveView = useCallback(
-    (view: DashboardView) => {
-      const next = viewToTabQuery(view);
-      const q = new URLSearchParams(searchParams.toString());
-      if (next === "home") {
-        q.delete("tab");
-      } else {
-        q.set("tab", next);
-      }
-      const qs = q.toString();
-      router.replace(qs ? `/?${qs}` : "/", { scroll: false });
-    },
-    [router, searchParams],
-  );
+  useEffect(() => {
+    const view = readViewFromLocation();
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab && !VALID_TABS.has(tab)) {
+      replaceDashboardTabUrl("home");
+      setActiveViewState("home");
+      return;
+    }
+    setActiveViewState(view);
+  }, []);
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab && !["home", "competitors", "saved", "search", "scripts"].includes(tab)) {
-      const q = new URLSearchParams(searchParams.toString());
-      q.delete("tab");
-      const qs = q.toString();
-      router.replace(qs ? `/?${qs}` : "/", { scroll: false });
-    }
-  }, [router, searchParams]);
+    const onPopState = () => setActiveViewState(readViewFromLocation());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  const setActiveView = useCallback((view: DashboardView) => {
+    setActiveViewState(view);
+    replaceDashboardTabUrl(view);
+  }, []);
+
+  useEffect(() => {
+    seedDashboardFromSsr(initial);
+    void loadTokenBalance();
+    void prefetchCompetitorsBase();
+  }, [initial]);
+
+  useEffect(() => {
+    const deferMs = 2_000;
+    const id = window.setTimeout(() => {
+      void loadSavedMap();
+      void loadSavedVideosList();
+    }, deferMs);
+    return () => window.clearTimeout(id);
+  }, []);
 
   return (
+    <AuthSessionProvider>
     <ToastProvider>
       <SavedVideosProvider>
         <DashboardLayout>
-          {/* Dashboard: фиксированная левая колонка + скролл справа */}
           <div className="flex h-dvh min-h-0 w-full overflow-hidden">
-            
-            {/* Левая колонка — не скроллится */}
             <aside className="z-20 hidden h-dvh w-[360px] shrink-0 flex-col gap-3 overflow-hidden bg-[#f4f5f7] py-2 pl-2 pr-3 lg:flex">
-              
-              {/* Карточка трендов */}
               <section className="min-h-0 flex-1 overflow-hidden">
-                <LiveTrendsSidebar onVideoClick={setSelectedVideo} />
+                <LiveTrendsSidebar initial={initial} onVideoClick={setSelectedVideo} />
               </section>
-
-              {/* Карточка профиля/кнопок */}
               <section className="shrink-0 overflow-visible">
-                <UserPanel user={mockUser} activeView={activeView} onChangeView={setActiveView} />
+                <UserPanel activeView={activeView} onChangeView={setActiveView} />
               </section>
-
             </aside>
 
-            {/* Основной контент — скроллится отдельно */}
             <main
-              className={`min-h-0 min-w-0 flex-1 bg-transparent min-h-screen pb-[calc(4.5rem+env(safe-area-inset-bottom))] ${
+              className={`min-h-0 min-w-0 flex-1 overflow-y-auto bg-transparent pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:h-dvh lg:max-h-dvh ${
                 activeView === "scripts"
-                  ? "overflow-y-auto lg:h-dvh lg:overflow-hidden lg:pb-3 sm:lg:pb-4"
-                  : "overflow-y-auto lg:h-dvh lg:pb-12"
+                  ? "lg:overflow-hidden lg:pb-3 sm:lg:pb-4"
+                  : "lg:pb-12"
               }`}
             >
-          {activeView === "home" ? (
-            <>
-              <LiveTrendsSidebar variant="mobile-horizontal" onVideoClick={setSelectedVideo} />
-              <WeeklyTrendsSection
-                trends={mockWeeklyTrends}
-                open={weeklyOpen}
-                onToggle={() => setWeeklyOpen((v) => !v)}
+          <DashboardTabPanel active={activeView === "home"}>
+            <LiveTrendsSidebar variant="mobile-horizontal" initial={initial} onVideoClick={setSelectedVideo} />
+            <WeeklyTrendsSection
+              trends={mockWeeklyTrends}
+              open={weeklyOpen}
+              onToggle={() => setWeeklyOpen((v) => !v)}
+            />
+            <div className="mt-0 flex flex-col gap-3 px-6">
+              <SearchResultsSection
+                searchCost={5}
+                initialHome={initial}
+                onVideoClick={setSelectedVideo}
               />
-              <div className="mt-0 flex flex-col gap-3 px-6">
-                <SearchResultsSection searchCost={5} onVideoClick={setSelectedVideo} />
-              </div>
-            </>
-          ) : activeView === "competitors" ? (
-            <CompetitorSpySection onVideoClick={setSelectedVideo} />
-          ) : activeView === "saved" ? (
-            <SavedVideosSection isActive onVideoClick={setSelectedVideo} />
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col lg:h-full lg:overflow-hidden">
-              <ScriptsSection />
             </div>
-          )}
+          </DashboardTabPanel>
 
+          <DashboardTabPanel active={activeView === "competitors"}>
+            <CompetitorSpySection active={activeView === "competitors"} onVideoClick={setSelectedVideo} />
+          </DashboardTabPanel>
+
+          <DashboardTabPanel active={activeView === "saved"}>
+            <SavedVideosSection isActive={activeView === "saved"} onVideoClick={setSelectedVideo} />
+          </DashboardTabPanel>
+
+          <DashboardTabPanel
+            active={activeView === "scripts"}
+            className="flex min-h-0 flex-1 flex-col lg:h-full lg:overflow-hidden"
+          >
+            <ScriptsSection />
+          </DashboardTabPanel>
             </main>
-
           </div>
 
-          {/* Мобильная навигация */}
           <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] lg:hidden">
-            <UserPanel
-              layout="bottom-nav"
-              user={mockUser}
-              activeView={activeView}
-              onChangeView={setActiveView}
-            />
+            <UserPanel layout="bottom-nav" activeView={activeView} onChangeView={setActiveView} />
           </div>
 
         <VideoDetailPanel
@@ -138,17 +137,14 @@ function HomeDashboardInner() {
       </DashboardLayout>
       </SavedVideosProvider>
     </ToastProvider>
+    </AuthSessionProvider>
   );
 }
 
-export function HomeDashboard() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500">Загрузка…</div>
-      }
-    >
-      <HomeDashboardInner />
-    </Suspense>
-  );
+type HomeDashboardProps = {
+  initial: DashboardInitialPayload;
+};
+
+export function HomeDashboard({ initial }: HomeDashboardProps) {
+  return <HomeDashboardInner initial={initial} />;
 }
