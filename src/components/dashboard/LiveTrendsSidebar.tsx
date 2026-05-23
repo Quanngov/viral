@@ -18,8 +18,10 @@ type LiveTrendsSidebarProps = {
   variant?: "sidebar" | "mobile-horizontal";
 };
 
-const POLLING_INTERVAL = 50_000;
+const POLLING_INTERVAL = 120_000;
+const MIN_POLL_GAP_MS = 60_000;
 const LAZY_REFRESH_SESSION_KEY = "viral_trends_lazy_refresh_v1";
+const LAZY_REFRESH_DEFER_MS = 20 * 60_000;
 
 let lazyRefreshInFlight: Promise<void> | null = null;
 
@@ -81,7 +83,7 @@ function useLiveTrends(enabled: boolean, ssrTrends: LiveTrendVideo[]) {
   const fetchTrends = useCallback(async (opts?: { silent?: boolean }) => {
     const now = Date.now();
     if (fetchInFlightRef.current) return;
-    if (!opts?.silent && now - lastFetchAtRef.current < 3_000) return;
+    if (now - lastFetchAtRef.current < (opts?.silent ? MIN_POLL_GAP_MS : 5_000)) return;
 
     fetchInFlightRef.current = true;
     lastFetchAtRef.current = now;
@@ -135,15 +137,18 @@ function useLiveTrends(enabled: boolean, ssrTrends: LiveTrendVideo[]) {
     if (!enabled) return;
     mountedRef.current = true;
 
-    void fetchTrends({ silent: true }).then(() => {
+    const lazyTimer = window.setTimeout(() => {
+      if (document.hidden) return;
       runLazyRefreshOnce();
-    });
+    }, LAZY_REFRESH_DEFER_MS);
+
     if (!document.hidden) startPolling();
     return () => {
       mountedRef.current = false;
+      window.clearTimeout(lazyTimer);
       stopPolling();
     };
-  }, [enabled, fetchTrends, startPolling, stopPolling]);
+  }, [enabled, startPolling, stopPolling]);
 
   return { trends, loaded, error, showSkeleton: false };
 }

@@ -268,41 +268,44 @@ export function CompetitorSpySection({ onVideoClick, active = true }: Competitor
 
     void loadBase();
 
-    void (async () => {
-      if (cancelled) return;
-      setDailySyncing(true);
-      setDailySyncHint(null);
-      try {
-        const res = await fetch("/api/competitors/daily-sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "initial", visibleVideoLimit: 16 }),
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          syncBlocked?: boolean;
-          reason?: string;
-        };
-        if (data.syncBlocked && data.reason === "not_enough_tokens") {
-          setDailySyncHint(USER_MSG.tokensInsufficient);
-        }
-        const [competitorsRes, videosRes] = await Promise.all([
-          fetch("/api/competitors", { cache: "no-store" }),
-          fetch("/api/competitors/videos", { cache: "no-store" }),
-        ]);
-        const competitorsData = (await competitorsRes.json()) as { competitors?: CompetitorAccount[] };
-        const videosData = (await videosRes.json()) as { videos?: CompetitorVideo[] };
+    const syncTimer = window.setTimeout(() => {
+      void (async () => {
         if (cancelled) return;
-        setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
-        setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
-      } catch {
-        /* keep first paint data */
-      } finally {
-        if (!cancelled) setDailySyncing(false);
-      }
-    })();
+        setDailySyncing(true);
+        setDailySyncHint(null);
+        try {
+          const res = await fetch("/api/competitors/daily-sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "initial", visibleVideoLimit: 16 }),
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            syncBlocked?: boolean;
+            reason?: string;
+          };
+          if (data.syncBlocked && data.reason === "not_enough_tokens") {
+            setDailySyncHint(USER_MSG.tokensInsufficient);
+          }
+          const [competitorsRes, videosRes] = await Promise.all([
+            fetch("/api/competitors", { cache: "no-store" }),
+            fetch("/api/competitors/videos", { cache: "no-store" }),
+          ]);
+          const competitorsData = (await competitorsRes.json()) as { competitors?: CompetitorAccount[] };
+          const videosData = (await videosRes.json()) as { videos?: CompetitorVideo[] };
+          if (cancelled) return;
+          setCompetitors(Array.isArray(competitorsData.competitors) ? competitorsData.competitors : []);
+          setVideos(Array.isArray(videosData.videos) ? (videosData.videos as CompetitorVideoRow[]) : []);
+        } catch {
+          /* keep first paint data */
+        } finally {
+          if (!cancelled) setDailySyncing(false);
+        }
+      })();
+    }, 60_000);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(syncTimer);
     };
   }, [active]);
 

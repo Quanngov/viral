@@ -17,16 +17,14 @@ import { WeeklyTrendsSection } from "@/components/dashboard/WeeklyTrendsSection"
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import type { GridVideo } from "@/lib/mock-data";
 import { mockWeeklyTrends } from "@/lib/mock-data";
-import {
-  loadSavedMap,
-  loadSavedVideosList,
-  loadTokenBalance,
-  prefetchCompetitorsBase,
-  seedDashboardFromSsr,
-} from "@/lib/dashboard-fetch";
+import { loadSavedMap, loadSavedVideosList, seedDashboardFromSsr } from "@/lib/dashboard-fetch";
 import { readViewFromLocation, replaceDashboardTabUrl } from "@/lib/dashboard-tab-url";
 
 const VALID_TABS = new Set(["home", "competitors", "saved", "search", "scripts"]);
+
+/** Stagger non-critical API work to protect Supabase pool (free tier). */
+const SAVED_MAP_MS = 12_000;
+const SAVED_LIST_MS = 18_000;
 
 function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
   const [activeView, setActiveViewState] = useState<DashboardView>("home");
@@ -57,17 +55,15 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
 
   useEffect(() => {
     seedDashboardFromSsr(initial);
-    void loadTokenBalance();
-    void prefetchCompetitorsBase();
   }, [initial]);
 
   useEffect(() => {
-    const deferMs = 2_000;
-    const id = window.setTimeout(() => {
-      void loadSavedMap();
-      void loadSavedVideosList();
-    }, deferMs);
-    return () => window.clearTimeout(id);
+    const t1 = window.setTimeout(() => void loadSavedMap(), SAVED_MAP_MS);
+    const t2 = window.setTimeout(() => void loadSavedVideosList(), SAVED_LIST_MS);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
   }, []);
 
   return (
@@ -120,7 +116,7 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
             active={activeView === "scripts"}
             className="flex min-h-0 flex-1 flex-col lg:h-full lg:overflow-hidden"
           >
-            <ScriptsSection />
+            <ScriptsSection active={activeView === "scripts"} />
           </DashboardTabPanel>
             </main>
           </div>

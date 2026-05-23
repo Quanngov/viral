@@ -80,9 +80,10 @@ export async function fetchRealtimeTrends(): Promise<TrendsPayload> {
 
 export function loadRealtimeTrends() {
   return cachedFetch(CACHE_KEYS.trends, fetchRealtimeTrends, {
-    ttlMs: 25_000,
-    staleMs: 120_000,
+    ttlMs: 120_000,
+    staleMs: 300_000,
     persist: true,
+    revalidate: false,
   });
 }
 

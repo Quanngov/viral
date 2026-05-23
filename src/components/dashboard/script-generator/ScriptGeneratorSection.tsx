@@ -151,7 +151,11 @@ function TokenSpark({ className }: { className?: string }) {
   );
 }
 
-export function ScriptGeneratorSection() {
+type ScriptGeneratorSectionProps = {
+  active?: boolean;
+};
+
+export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSectionProps) {
   const { showToast } = useToast();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -242,11 +246,17 @@ export function ScriptGeneratorSection() {
     [scrollToBottom],
   );
 
+  const bootstrappedRef = useRef(false);
+
   useEffect(() => {
-    void (async () => {
-      await Promise.all([loadChats(), loadProfile(), loadSaved()]);
-    })();
-  }, [loadChats, loadProfile, loadSaved]);
+    if (!active) return;
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    const id = window.setTimeout(() => {
+      void Promise.all([loadChats(), loadProfile(), loadSaved()]);
+    }, 500);
+    return () => window.clearTimeout(id);
+  }, [active, loadChats, loadProfile, loadSaved]);
 
   useEffect(() => {
     if (!selectedChatId) return;

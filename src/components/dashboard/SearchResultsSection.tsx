@@ -67,23 +67,24 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
 
   useEffect(() => {
     if (sourceVideos.length === 0) return;
-    void hydrateForVideos(sourceVideos);
+    const id = window.setTimeout(() => void hydrateForVideos(sourceVideos), 4_000);
+    return () => window.clearTimeout(id);
   }, [sourceVideos, hydrateForVideos]);
 
   useEffect(() => {
     let alive = true;
-    const timerId = window.setTimeout(() => {
+    const phase2 = window.setTimeout(() => {
       void (async () => {
         try {
           const { videos } = await fetchHomeVideos(24);
           if (!alive) return;
           const valid = filterDisplayableVideos(videos);
-          if (valid.length > 0) {
-            setSourceVideos(valid);
-          }
+          if (valid.length > 0) setSourceVideos(valid);
         } catch {
           /* keep SSR batch */
         }
+        if (!alive) return;
+        await new Promise((r) => window.setTimeout(r, 5_000));
         if (!alive) return;
         try {
           const count = await fetchHomeVideoCountLazy();
@@ -92,11 +93,11 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
           /* stats optional */
         }
       })();
-    }, 300);
+    }, 5_000);
 
     return () => {
       alive = false;
-      window.clearTimeout(timerId);
+      window.clearTimeout(phase2);
     };
   }, []);
 

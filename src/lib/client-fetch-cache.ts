@@ -39,6 +39,8 @@ export type CachedFetchOptions = {
   /** Show stale data while revalidating in background */
   staleMs?: number;
   persist?: boolean;
+  /** When false, return stale without firing a background refetch (load shedding). */
+  revalidate?: boolean;
 };
 
 /**
@@ -72,7 +74,7 @@ export async function cachedFetch<T>(
   };
 
   if (stale) {
-    if (!inflight.has(key)) {
+    if (opts.revalidate !== false && !inflight.has(key)) {
       inflight.set(
         key,
         run().finally(() => {

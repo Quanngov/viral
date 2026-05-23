@@ -152,11 +152,8 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
   }, []);
 
   useEffect(() => {
+    if (!showAuthed || sessionLoading) return;
     void refreshBalance();
-  }, [refreshBalance]);
-
-  useEffect(() => {
-    if (showAuthed && !sessionLoading) void refreshBalance();
   }, [showAuthed, sessionLoading, displayEmail, refreshBalance]);
 
   const onAuthSuccess = useCallback(() => {
