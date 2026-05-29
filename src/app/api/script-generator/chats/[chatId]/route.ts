@@ -46,3 +46,19 @@ export async function GET(_req: Request, ctx: RouteCtx) {
     tokenCost: getScriptGenerationTokenCost(),
   });
 }
+
+export async function DELETE(_req: Request, ctx: RouteCtx) {
+  const { userId } = await ensureSessionUser();
+  const { chatId } = await ctx.params;
+
+  const chat = await prisma.scriptChat.findFirst({
+    where: { id: chatId, userId },
+    select: { id: true },
+  });
+  if (!chat) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  await prisma.scriptChat.delete({ where: { id: chatId } });
+  return NextResponse.json({ ok: true });
+}

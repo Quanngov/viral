@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ChevronDown, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Copy, ExternalLink, Loader2, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { ScriptAssistantMarkdown } from "@/components/dashboard/script-generator/ScriptAssistantMarkdown";
+import { DashboardModal } from "@/components/dashboard/DashboardModal";
 import { formatViewsCount } from "@/lib/format-video";
 import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
 import {
@@ -85,11 +86,19 @@ function mergeProfileForEditor(p: ApiProfile): string {
 /** Отображаемая стоимость; совпадает с дефолтом `getScriptGenerationTokenCost` на сервере (20). */
 const SCRIPT_GENERATION_UI_COST = 20;
 
-function ScriptReferenceCard({ item }: { item: RefRow }) {
+function ScriptReferenceCard({
+  item,
+  onRemove,
+  removing,
+}: {
+  item: RefRow;
+  onRemove: () => void;
+  removing?: boolean;
+}) {
   const pf = platformUi(item.platform);
   const author = item.authorDisplayName?.trim() || item.authorUsername?.trim() || "—";
   return (
-    <div className="script-msg-enter w-full max-w-[95%] self-start rounded-2xl border border-emerald-100/90 bg-gradient-to-br from-white to-emerald-50/35 p-3 shadow-sm ring-1 ring-zinc-100">
+    <div className="script-msg-enter group/reference w-full max-w-[95%] self-start rounded-2xl border border-emerald-100/90 bg-gradient-to-br from-white to-emerald-50/35 p-3 shadow-sm ring-1 ring-zinc-100">
       <div className="flex gap-3">
         <div className="relative h-[4.5rem] w-[4rem] shrink-0 overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200/80">
           {item.thumbnailUrl ? (
@@ -122,6 +131,15 @@ function ScriptReferenceCard({ item }: { item: RefRow }) {
             </a>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={removing}
+          className="shrink-0 self-start rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-white/80 hover:text-zinc-700 disabled:opacity-40 max-lg:opacity-100 lg:opacity-0 lg:group-hover/reference:opacity-100"
+          aria-label="Удалить референс"
+        >
+          {removing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
+        </button>
       </div>
       <div className="mt-3 rounded-xl border border-zinc-100 bg-white/70 p-2.5 shadow-inner shadow-zinc-900/[0.02]">
         <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Текст ролика</p>
@@ -170,6 +188,10 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
   const [profileSaved, setProfileSaved] = useState<"idle" | "saving" | "saved" | "err">("idle");
   const [importingId, setImportingId] = useState<string | null>(null);
   const [chatMenuOpen, setChatMenuOpen] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
+  const [deletingChat, setDeletingChat] = useState(false);
+  const [pendingImportSavedId, setPendingImportSavedId] = useState<string | null>(null);
+  const [removingRefId, setRemovingRefId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const profileSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -393,7 +415,7 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
     };
   }, [profileText, profileReady, persistProfile]);
 
-  const onNewChat = useCallback(async () => {
+  const onNewChat = useCallback(async (): Promise<string | null> => {
     setError(null);
     setNotice(null);
     setChatMenuOpen(false);
@@ -404,13 +426,16 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
     });
     if (!res.ok) {
       setError("Не удалось создать чат");
-      return;
+      return null;
     }
     const data = (await res.json()) as { chat?: ChatSummary };
-    if (!data.chat) return;
+    if (!data.chat) return null;
     setChats((prev) => [data.chat!, ...prev]);
     setSelectedChatId(data.chat.id);
+    setMessages([]);
+    setReferences([]);
     setPrompt("");
+    return data.chat.id;
   }, []);
 
   const onSelectChat = useCallback((id: string) => {
@@ -422,24 +447,62 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
     setChatMenuOpen(false);
   }, []);
 
+  const hasUserAssistant = useMemo(
+    () => messages.some((m) => m.role === "user" || m.role === "assistant"),
+    [messages],
+  );
+
   const ensureChatId = useCallback(async (): Promise<string | null> => {
     if (selectedChatId) return selectedChatId;
-    const res = await fetch("/api/script-generator/chats", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Новый чат" }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { chat?: ChatSummary };
-    if (!data.chat) return null;
-    setChats((prev) => [data.chat!, ...prev]);
-    setSelectedChatId(data.chat.id);
-    setPrompt("");
-    return data.chat.id;
-  }, [selectedChatId]);
+    return onNewChat();
+  }, [selectedChatId, onNewChat]);
+
+  const importSavedVideoToChat = useCallback(
+    async (chatId: string, savedVideoId: string) => {
+      const res = await fetch(`/api/script-generator/chats/${encodeURIComponent(chatId)}/import-video`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ savedVideoId }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        code?: string;
+        message?: string;
+        duplicate?: boolean;
+        replaced?: boolean;
+        reference?: RefRow;
+      };
+      if (!res.ok) {
+        if (res.status === 409 && data.code === "has_history") {
+          setPendingImportSavedId(savedVideoId);
+          return false;
+        }
+        if (res.status === 409 && data.code === "ref_limit") {
+          showToast(typeof data.message === "string" ? data.message : SCRIPT_REF_LIMIT_MESSAGE, "warn");
+          return false;
+        }
+        setError(typeof data.message === "string" ? data.message : "Не удалось добавить ролик");
+        return false;
+      }
+      if (data.duplicate) {
+        showToast(SCRIPT_REF_DUPLICATE_MESSAGE, "warn");
+        await loadChatMessages(chatId);
+        return true;
+      }
+      showToast(data.replaced ? "Референс заменён" : "Референс добавлен", "ok");
+      await loadChatMessages(chatId);
+      void loadChats();
+      return true;
+    },
+    [loadChatMessages, loadChats, showToast],
+  );
 
   const onImport = useCallback(
     async (savedVideoId: string) => {
+      if (hasUserAssistant) {
+        setPendingImportSavedId(savedVideoId);
+        return;
+      }
       setImportingId(savedVideoId);
       setError(null);
       setNotice(null);
@@ -449,52 +512,127 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
           setError("Не удалось создать чат");
           return;
         }
-        const res = await fetch(`/api/script-generator/chats/${encodeURIComponent(chatId)}/import-video`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ savedVideoId }),
-        });
-        const data = (await res.json()) as {
-          error?: string;
-          code?: string;
-          message?: string;
-          duplicate?: boolean;
-          reference?: RefRow;
-        };
-        if (!res.ok) {
-          if (res.status === 409 && data.code === "ref_limit") {
-            showToast(typeof data.message === "string" ? data.message : SCRIPT_REF_LIMIT_MESSAGE, "warn");
-            return;
-          }
-          setError(typeof data.message === "string" ? data.message : "Не удалось добавить ролик");
-          return;
-        }
-        if (data.duplicate) {
-          showToast(SCRIPT_REF_DUPLICATE_MESSAGE, "warn");
-          await loadChatMessages(chatId);
-          return;
-        }
-        showToast("Референс добавлен", "ok");
-        await loadChatMessages(chatId);
-        void loadChats();
+        await importSavedVideoToChat(chatId, savedVideoId);
       } finally {
         setImportingId(null);
       }
     },
-    [ensureChatId, loadChatMessages, loadChats, showToast],
+    [ensureChatId, hasUserAssistant, importSavedVideoToChat],
   );
+
+  const onRemoveReference = useCallback(
+    async (referenceId: string) => {
+      if (!selectedChatId) return;
+      setRemovingRefId(referenceId);
+      setError(null);
+      try {
+        const res = await fetch(
+          `/api/script-generator/chats/${encodeURIComponent(selectedChatId)}/references/${encodeURIComponent(referenceId)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) {
+          setError("Не удалось удалить референс");
+          return;
+        }
+        setReferences([]);
+        showToast("Референс удалён", "ok");
+      } finally {
+        setRemovingRefId(null);
+      }
+    },
+    [selectedChatId, showToast],
+  );
+
+  const onCreateNewChatWithPendingVideo = useCallback(async () => {
+    const savedVideoId = pendingImportSavedId;
+    setPendingImportSavedId(null);
+    if (!savedVideoId) return;
+    setImportingId(savedVideoId);
+    setError(null);
+    try {
+      const res = await fetch("/api/script-generator/chats/with-reference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Новый чат", savedVideoId }),
+      });
+      const data = (await res.json()) as { chat?: ChatSummary; message?: string };
+      if (!res.ok || !data.chat) {
+        setError(typeof data.message === "string" ? data.message : "Не удалось создать чат");
+        return;
+      }
+      setChats((prev) => [data.chat!, ...prev]);
+      setSelectedChatId(data.chat.id);
+      setPrompt("");
+      await loadChatMessages(data.chat.id);
+      void loadChats();
+      showToast("Новый чат с референсом создан", "ok");
+    } finally {
+      setImportingId(null);
+    }
+  }, [pendingImportSavedId, loadChatMessages, loadChats, showToast]);
+
+  const confirmDeleteChat = useCallback(async () => {
+    const chatId = chatToDelete;
+    if (!chatId || deletingChat) return;
+    setDeletingChat(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/script-generator/chats/${encodeURIComponent(chatId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        setError("Не удалось удалить чат");
+        return;
+      }
+      const idx = chats.findIndex((c) => c.id === chatId);
+      const remaining = chats.filter((c) => c.id !== chatId);
+      setChats(remaining);
+      setChatToDelete(null);
+      setChatMenuOpen(false);
+
+      if (chatId !== selectedChatId) return;
+
+      if (remaining.length > 0) {
+        const neighbor = remaining[Math.min(idx, remaining.length - 1)] ?? remaining[0];
+        setSelectedChatId(neighbor.id);
+        setPrompt("");
+        return;
+      }
+
+      setSelectedChatId(null);
+      setMessages([]);
+      setReferences([]);
+      await onNewChat();
+    } finally {
+      setDeletingChat(false);
+    }
+  }, [chatToDelete, deletingChat, chats, selectedChatId, onNewChat]);
 
   const onGenerate = useCallback(async () => {
     if (!selectedChatId || generating) return;
-    if (!prompt.trim() && references.length === 0) return;
+    const promptTrim = prompt.trim();
+    if (!promptTrim && references.length === 0) return;
+
+    const storedContent = promptTrim || SCRIPT_PROMPT_REF_ONLY;
+    const optimisticId = `opt-${Date.now()}`;
+    const optimisticMsg: Msg = {
+      id: optimisticId,
+      role: "user",
+      content: storedContent,
+      savedVideoId: null,
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setPrompt("");
     setGenerating(true);
     setError(null);
     setNotice(null);
+    requestAnimationFrame(scrollToBottom);
+
     try {
       const res = await fetch("/api/script-generator/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatId: selectedChatId, prompt: prompt.trim() }),
+        body: JSON.stringify({ chatId: selectedChatId, prompt: promptTrim }),
       });
       const data = (await res.json()) as {
         error?: string;
@@ -510,19 +648,28 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
             typeof data.message === "string" ? data.message : typeof data.error === "string" ? data.error : "",
           ) || "Ошибка генерации",
         );
+        await loadChatMessages(selectedChatId);
         return;
       }
       showToast("Сценарий готов", "ok");
       if (data.chatTitle) {
         setChats((prev) => prev.map((c) => (c.id === selectedChatId ? { ...c, title: data.chatTitle! } : c)));
       }
-      setPrompt("");
       await loadChatMessages(selectedChatId);
       await loadChats();
     } finally {
       setGenerating(false);
     }
-  }, [selectedChatId, prompt, generating, references.length, loadChatMessages, loadChats, showToast]);
+  }, [
+    selectedChatId,
+    prompt,
+    generating,
+    references.length,
+    loadChatMessages,
+    loadChats,
+    showToast,
+    scrollToBottom,
+  ]);
 
   useEffect(() => {
     if (selectedChatId) return;
@@ -536,11 +683,6 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
     if (!selectedChatId) return chats.length ? "Выберите чат" : "Нет чатов";
     return chats.find((c) => c.id === selectedChatId)?.title ?? "Чат";
   }, [chats, selectedChatId]);
-
-  const hasUserAssistant = useMemo(
-    () => messages.some((m) => m.role === "user" || m.role === "assistant"),
-    [messages],
-  );
 
   const showDefaultEmpty = references.length === 0 && !hasUserAssistant && !generating;
   const showReferenceOnlyHint = references.length > 0 && !hasUserAssistant && !generating;
@@ -577,27 +719,42 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
                 role="listbox"
                 className="absolute left-1/2 top-full z-20 mt-1 max-h-64 w-max min-w-[min(18rem,calc(100vw-2rem))] max-w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-lg shadow-zinc-900/10"
               >
-                {chats.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    role="option"
-                    aria-selected={c.id === selectedChatId}
-                    onClick={() => onSelectChat(c.id)}
-                    className={`flex w-full items-center px-3 py-2 text-left text-sm ${
-                      c.id === selectedChatId ? "bg-emerald-50 font-medium text-emerald-950" : "text-zinc-800 hover:bg-zinc-50"
-                    }`}
-                  >
-                    <span className="truncate">{c.title}</span>
-                  </button>
-                ))}
                 <button
                   type="button"
                   onClick={() => void onNewChat()}
-                  className="flex w-full items-center border-t border-zinc-100 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                  className="flex w-full items-center gap-2 border-b border-zinc-100 px-3 py-2.5 text-left text-sm font-medium text-emerald-800 hover:bg-emerald-50/80"
                 >
-                  Новый чат
+                  <Plus className="h-4 w-4 shrink-0" aria-hidden />
+                  Создать новый чат
                 </button>
+                {chats.map((c) => (
+                  <div key={c.id} className="group/chat flex w-full items-center">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={c.id === selectedChatId}
+                      onClick={() => onSelectChat(c.id)}
+                      className={`min-w-0 flex-1 px-3 py-2 text-left text-sm ${
+                        c.id === selectedChatId
+                          ? "bg-emerald-50 font-medium text-emerald-950"
+                          : "text-zinc-800 hover:bg-zinc-50"
+                      }`}
+                    >
+                      <span className="block truncate">{c.title}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChatToDelete(c.id);
+                      }}
+                      className="mr-1.5 shrink-0 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 max-lg:opacity-100 lg:opacity-0 lg:group-hover/chat:opacity-100"
+                      aria-label={`Удалить чат «${c.title}»`}
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </div>
+                ))}
               </div>
             ) : null}
           </div>
@@ -608,7 +765,12 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
               className="scrollbar-hidden flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain pr-0.5"
             >
             {references.map((r) => (
-              <ScriptReferenceCard key={r.id} item={r} />
+              <ScriptReferenceCard
+                key={r.id}
+                item={r}
+                removing={removingRefId === r.id}
+                onRemove={() => void onRemoveReference(r.id)}
+              />
             ))}
 
             {notice ? (
@@ -752,6 +914,13 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
                   setNotice(null);
                   setPrompt(e.target.value);
                 }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || e.shiftKey) return;
+                  e.preventDefault();
+                  if (!selectedChatId || generating) return;
+                  if (!prompt.trim() && references.length === 0) return;
+                  void onGenerate();
+                }}
                 rows={1}
                 placeholder="Промпт для сценария…"
                 disabled={!selectedChatId || generating}
@@ -860,6 +1029,63 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
           </section>
         </div>
       </div>
+
+      <DashboardModal
+        compact
+        open={chatToDelete !== null}
+        onClose={() => {
+          if (!deletingChat) setChatToDelete(null);
+        }}
+        title="Удалить этот чат?"
+        backdropBlur={false}
+      >
+        <p className="text-sm text-zinc-600">История сообщений и референсы будут удалены без возможности восстановления.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={deletingChat}
+            onClick={() => setChatToDelete(null)}
+            className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            disabled={deletingChat}
+            onClick={() => void confirmDeleteChat()}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {deletingChat ? "Удаление…" : "Удалить"}
+          </button>
+        </div>
+      </DashboardModal>
+
+      <DashboardModal
+        compact
+        open={pendingImportSavedId !== null}
+        onClose={() => setPendingImportSavedId(null)}
+        title="У этого чата уже есть история сообщений"
+        subtitle="Что сделать?"
+        backdropBlur={false}
+      >
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setPendingImportSavedId(null)}
+            className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            disabled={importingId !== null}
+            onClick={() => void onCreateNewChatWithPendingVideo()}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            Создать новый чат с этим роликом
+          </button>
+        </div>
+      </DashboardModal>
     </div>
   );
 }

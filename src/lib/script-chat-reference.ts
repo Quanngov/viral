@@ -8,14 +8,27 @@ import {
 } from "@/lib/resolve-video-for-transcription";
 import {
   SCRIPT_REF_DUPLICATE_MESSAGE,
+  SCRIPT_REF_HAS_HISTORY_MESSAGE,
   SCRIPT_REF_LIMIT_MESSAGE,
 } from "@/lib/script-shared-constants";
 
-export { SCRIPT_REF_DUPLICATE_MESSAGE, SCRIPT_REF_LIMIT_MESSAGE };
+export { SCRIPT_REF_DUPLICATE_MESSAGE, SCRIPT_REF_HAS_HISTORY_MESSAGE, SCRIPT_REF_LIMIT_MESSAGE };
+
+export async function chatHasConversationMessages(chatId: string): Promise<boolean> {
+  const n = await prisma.scriptMessage.count({
+    where: { chatId, role: { in: ["user", "assistant"] } },
+  });
+  return n > 0;
+}
 
 export type AttachScriptReferenceResult =
-  | { ok: true; duplicate: boolean; reference: ScriptChatReference }
-  | { ok: false; status: 404 | 400 | 409; message: string; code?: "ref_limit" };
+  | { ok: true; duplicate: boolean; replaced: boolean; reference: ScriptChatReference }
+  | {
+      ok: false;
+      status: 404 | 400 | 409;
+      message: string;
+      code?: "ref_limit" | "has_history";
+    };
 
 export async function attachScriptVideoReference(
   chatId: string,
@@ -34,12 +47,23 @@ export async function attachScriptVideoReference(
     where: { chatId },
     orderBy: { createdAt: "asc" },
   });
+  let replaced = false;
   if (existingAny) {
     const same = existingAny.platform === v.platform && existingAny.externalId === v.externalId;
     if (same) {
-      return { ok: true, duplicate: true, reference: existingAny };
+      return { ok: true, duplicate: true, replaced: false, reference: existingAny };
     }
-    return { ok: false, status: 409, code: "ref_limit", message: SCRIPT_REF_LIMIT_MESSAGE };
+    const hasHistory = await chatHasConversationMessages(chatId);
+    if (hasHistory) {
+      return {
+        ok: false,
+        status: 409,
+        code: "has_history",
+        message: SCRIPT_REF_HAS_HISTORY_MESSAGE,
+      };
+    }
+    await prisma.scriptChatReference.delete({ where: { id: existingAny.id } });
+    replaced = true;
   }
 
   const savedId = input.savedVideoId?.trim() || null;
@@ -73,7 +97,33 @@ export async function attachScriptVideoReference(
     data: { updatedAt: new Date() },
   });
 
-  return { ok: true, duplicate: false, reference };
+  return { ok: true, duplicate: false, replaced, reference };
+}
+
+export type DetachScriptReferenceResult =
+  | { ok: true }
+  | { ok: false; status: 404; message: string };
+
+export async function detachScriptVideoReference(
+  chatId: string,
+  userId: string,
+  referenceId: string,
+): Promise<DetachScriptReferenceResult> {
+  const chat = await prisma.scriptChat.findFirst({ where: { id: chatId, userId } });
+  if (!chat) return { ok: false, status: 404, message: "Чат не найден." };
+
+  const ref = await prisma.scriptChatReference.findFirst({
+    where: { id: referenceId, chatId },
+  });
+  if (!ref) return { ok: false, status: 404, message: "Референс не найден." };
+
+  await prisma.scriptChatReference.delete({ where: { id: ref.id } });
+  await prisma.scriptChat.update({
+    where: { id: chatId },
+    data: { updatedAt: new Date() },
+  });
+
+  return { ok: true };
 }
 
 export type ScriptChatReferenceApiRow = {

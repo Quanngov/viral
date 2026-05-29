@@ -41,10 +41,11 @@ export async function POST(req: Request, ctx: RouteCtx) {
 
   const r = await attachScriptVideoReference(chatId, userId, input);
   if (!r.ok) {
+    const code = r.code ?? "not_found";
     return NextResponse.json(
       {
-        error: r.code === "ref_limit" ? "ref_limit" : "not_found",
-        code: r.code,
+        error: code,
+        code,
         message: r.message,
       },
       { status: r.status },
@@ -62,6 +63,7 @@ export async function POST(req: Request, ctx: RouteCtx) {
   return NextResponse.json({
     reference: serializeScriptChatReference(ref, video),
     duplicate: r.duplicate,
+    replaced: r.replaced,
     tokenCost: getScriptGenerationTokenCost(),
   });
 }
