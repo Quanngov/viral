@@ -101,9 +101,10 @@ export async function cachedFetch<T>(
   }
 }
 
-/** Prime in-memory cache after SSR (stale-while-revalidate on next fetch). */
-export function seedCached<T>(key: string, data: T): void {
+/** Prime in-memory (+ optional sessionStorage) after SSR or background refresh. */
+export function seedCached<T>(key: string, data: T, opts?: { persist?: boolean }): void {
   memory.set(key, { data, at: Date.now() });
+  if (opts?.persist) writePersisted(key, data);
 }
 
 export function invalidateCached(key: string): void {

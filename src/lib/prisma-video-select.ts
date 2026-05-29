@@ -7,7 +7,12 @@ export const HOME_VIDEO_WHERE: Prisma.VideoWhereInput = {
   OR: [
     { platform: "youtube" },
     {
-      AND: [{ thumbnailUrl: { not: null } }, { NOT: { thumbnailUrl: "" } }],
+      AND: [
+        { platform: "instagram" },
+        { thumbnailUrl: { not: null } },
+        { NOT: { thumbnailUrl: "" } },
+        { thumbnailFailCount: { lt: 3 } },
+      ],
     },
   ],
 };

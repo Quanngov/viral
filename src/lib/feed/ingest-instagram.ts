@@ -100,6 +100,9 @@ export async function upsertInstagramReelsFromTikHub(
         title: data.title,
         description: data.description,
         thumbnailUrl: data.thumbnailUrl,
+        ...(data.thumbnailUrl
+          ? { thumbnailStatus: "valid" as const, thumbnailFailCount: 0 }
+          : {}),
         videoUrl: data.videoUrl,
         publishedAt: data.publishedAt,
         durationSeconds: data.durationSeconds,

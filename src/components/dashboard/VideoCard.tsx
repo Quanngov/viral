@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { GridVideo } from "@/lib/mock-data";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { reportThumbnailLoadFailure } from "@/lib/report-thumbnail-failure";
 
 const DEBUG_FIRST =
   typeof process !== "undefined" && process.env.NODE_ENV === "development";
@@ -27,8 +28,16 @@ function cardPlatform(v: GridVideo): "youtube" | "instagram" | "tiktok" {
   return "youtube";
 }
 
+function resolveExternalId(video: GridVideo): string | null {
+  if (video.externalId?.trim()) return video.externalId.trim();
+  if (video.youtubeId?.trim()) return video.youtubeId.trim();
+  const colon = video.id.indexOf(":");
+  if (colon > 0) return video.id.slice(colon + 1).trim() || null;
+  return null;
+}
+
 function resolveThumbSrc(video: GridVideo, platform: string): string | null {
-  const extId = video.externalId ?? video.youtubeId ?? null;
+  const extId = resolveExternalId(video);
   const raw = video.thumbnailUrl?.trim();
   if (raw) return raw;
   if (platform === "youtube" && extId) {
@@ -51,10 +60,15 @@ export function VideoCard({
 
   const markReady = useCallback(() => setThumbReady(true), []);
 
+  const externalId = resolveExternalId(video);
+
   const onThumbError = useCallback(() => {
     setImgFailed(true);
     setThumbReady(true);
-  }, []);
+    if (platform === "instagram" && externalId) {
+      reportThumbnailLoadFailure("instagram", externalId);
+    }
+  }, [platform, externalId]);
 
   useEffect(() => {
     if (!thumbSrc) {
@@ -122,6 +136,7 @@ export function VideoCard({
   ]);
 
   if (!video.title?.trim()) return null;
+  if (platform === "instagram" && imgFailed) return null;
   if (showIconFallback && !thumbSrc) {
     /* no usable preview — parent filter should drop these; safety */
     if (debugFirst && DEBUG_FIRST) {

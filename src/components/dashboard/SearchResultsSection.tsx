@@ -14,7 +14,12 @@ import {
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
 import { VideoGridSkeleton } from "@/components/dashboard/DashboardSkeletons";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
-import { fetchHomeVideoCountLazy, fetchHomeVideos } from "@/lib/dashboard-fetch";
+import {
+  fetchHomeVideoCountLazy,
+  fetchHomeVideos,
+  persistHomeGridCache,
+  peekHomeGridCache,
+} from "@/lib/dashboard-fetch";
 import { filterDisplayableVideos } from "@/lib/grid-video-display";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 import { useToast } from "@/components/dashboard/ToastContext";
@@ -35,11 +40,14 @@ type FeedSession = {
 export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: SearchResultsSectionProps) {
   const { showToast } = useToast();
   const { hydrateForVideos, lastError, clearError } = useSavedVideos();
-  const [sourceVideos, setSourceVideos] = useState<GridVideo[]>(() =>
-    filterDisplayableVideos(initialHome.homeVideos),
+  const ssrVideos = useMemo(
+    () => filterDisplayableVideos(initialHome.homeVideos),
+    [initialHome.homeVideos],
   );
+  const [sourceVideos, setSourceVideos] = useState<GridVideo[]>(ssrVideos);
   const [loading, setLoading] = useState(false);
-  const [homeReady, setHomeReady] = useState(true);
+  const [homeReady, setHomeReady] = useState(() => ssrVideos.length > 0);
+  const [gridFadeIn, setGridFadeIn] = useState(() => ssrVideos.length > 0);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [, setTokensRemaining] = useState<number | null>(null);
@@ -71,6 +79,14 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     return () => window.clearTimeout(id);
   }, [sourceVideos, hydrateForVideos]);
 
+  /** After hydration — restore persisted grid without SSR mismatch. */
+  useEffect(() => {
+    const cached = peekHomeGridCache();
+    if (!cached?.videos.length) return;
+    setSourceVideos(cached.videos);
+    setHomeReady(true);
+  }, []);
+
   useEffect(() => {
     let alive = true;
     const phase2 = window.setTimeout(() => {
@@ -79,9 +95,14 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
           const { videos } = await fetchHomeVideos(24);
           if (!alive) return;
           const valid = filterDisplayableVideos(videos);
-          if (valid.length > 0) setSourceVideos(valid);
+          if (valid.length > 0) {
+            persistHomeGridCache(valid);
+            setSourceVideos(valid);
+            setHomeReady(true);
+          }
         } catch {
-          /* keep SSR batch */
+          if (!alive) return;
+          setHomeReady(true);
         }
         if (!alive) return;
         await new Promise((r) => window.setTimeout(r, 5_000));
@@ -274,6 +295,15 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     });
   }, []);
 
+  useEffect(() => {
+    if (!homeReady) {
+      setGridFadeIn(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setGridFadeIn(true));
+    return () => cancelAnimationFrame(id);
+  }, [homeReady]);
+
   const isSearchMode = Boolean(session);
   const showGridSkeleton = isSearchMode ? loading : !homeReady;
   const displayedVideos = videos;
@@ -357,7 +387,13 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
           {showGridSkeleton ? (
             <VideoGridSkeleton count={8} />
           ) : (
-            <VideoGrid videos={displayedVideos} onVideoClick={onVideoClick} />
+            <div
+              className={`transition-opacity duration-500 ease-out ${
+                gridFadeIn ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              <VideoGrid videos={displayedVideos} onVideoClick={onVideoClick} />
+            </div>
           )}
           {showLoadMore ? (
             <div className="mt-1 flex justify-center">

@@ -2,9 +2,9 @@
 
 /** Matches VideoCard shell — same aspect ratio, radius, shadow (no CLS). */
 export const SKELETON_CARD_CLASS =
-  "aspect-[3/4] w-full shrink-0 rounded-2xl bg-zinc-200/90 shadow-sm shadow-zinc-900/5";
+  "aspect-[3/4] w-full shrink-0 rounded-2xl shadow-sm shadow-zinc-900/5 skeleton-breathe skeleton-shimmer";
 
-const BLOCK_CLASS = "animate-pulse rounded-md bg-zinc-200/90";
+const BLOCK_CLASS = "skeleton-breathe skeleton-shimmer rounded-md";
 
 export function VideoCardSkeleton() {
   return (
@@ -12,9 +12,7 @@ export function VideoCardSkeleton() {
       className="overflow-hidden rounded-2xl bg-white shadow-sm shadow-zinc-900/5"
       aria-hidden
     >
-      <div className={`${SKELETON_CARD_CLASS} relative overflow-hidden bg-zinc-200/80`}>
-        <div className="card-thumb-glass absolute inset-0" />
-      </div>
+      <div className={SKELETON_CARD_CLASS} />
     </div>
   );
 }

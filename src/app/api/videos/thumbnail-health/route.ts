@@ -22,5 +22,12 @@ export const POST = withApiRoute("videos.thumbnail-health.POST", async (req) => 
   }
 
   const result = await recordThumbnailFailure(platform, externalId);
+  if (result.action === "recovered") {
+    return NextResponse.json({
+      status: "recovered",
+      thumbnailUrl: result.thumbnailUrl,
+      failCount: 0,
+    });
+  }
   return NextResponse.json(result);
 });

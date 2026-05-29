@@ -47,8 +47,36 @@ body {
 }
 
 .skeleton-breathe {
-  background-color: rgb(228 228 231 / 0.92);
-  animation: skeleton-breathe 2.2s ease-in-out infinite;
+  background-color: rgb(244 244 245 / 0.95);
+  animation: skeleton-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgb(255 255 255 / 0.42) 50%,
+    transparent 62%
+  );
+  animation: skeleton-shimmer-slide 2.8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 /* Video card — soft glass loading (opacity/transform only) */

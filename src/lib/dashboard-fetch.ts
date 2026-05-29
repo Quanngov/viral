@@ -2,6 +2,12 @@ import { cachedFetch, peekCached, seedCached } from "@/lib/client-fetch-cache";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import { HOME_SSR_LIMIT } from "@/lib/dashboard-initial";
 import type { GridVideo } from "@/lib/mock-data";
+import { filterDisplayableVideos } from "@/lib/grid-video-display";
+
+/** Persisted home grid (12–24 cards) — survives reload. */
+export const HOME_GRID_CACHE_KEY = "api:videos:home:grid";
+const HOME_GRID_STALE_MS = 30 * 60_000;
+const TRENDS_STALE_MS = 30 * 60_000;
 
 /** @deprecated Import typed helpers (peekHomeCache, etc.) from this module instead. */
 export { peekCached } from "@/lib/client-fetch-cache";
@@ -78,13 +84,36 @@ export async function fetchRealtimeTrends(): Promise<TrendsPayload> {
   };
 }
 
+export function peekTrendsCache(): TrendsPayload | null {
+  return peekCached<TrendsPayload>(CACHE_KEYS.trends, TRENDS_STALE_MS, true);
+}
+
+export function persistTrendsCache(trends: TrendsPayload): void {
+  seedCached(CACHE_KEYS.trends, trends, { persist: true });
+}
+
 export function loadRealtimeTrends() {
   return cachedFetch(CACHE_KEYS.trends, fetchRealtimeTrends, {
     ttlMs: 120_000,
-    staleMs: 300_000,
+    staleMs: TRENDS_STALE_MS,
     persist: true,
-    revalidate: false,
   });
+}
+
+export function peekHomeGridCache(): HomePayload | null {
+  const raw = peekCached<HomePayload>(HOME_GRID_CACHE_KEY, HOME_GRID_STALE_MS, true);
+  if (!raw?.videos?.length) return null;
+  return { videos: filterDisplayableVideos(raw.videos), totalCount: raw.totalCount ?? null };
+}
+
+export function persistHomeGridCache(videos: GridVideo[]): void {
+  const valid = filterDisplayableVideos(videos);
+  if (valid.length === 0) return;
+  seedCached(
+    HOME_GRID_CACHE_KEY,
+    { videos: valid, totalCount: null } satisfies HomePayload,
+    { persist: true },
+  );
 }
 
 export async function fetchSavedMap(): Promise<Record<string, boolean>> {
@@ -152,11 +181,13 @@ export function prefetchCompetitorsBase() {
   });
 }
 
-/** After SSR hydrate — skip duplicate above-the-fold fetches; SWR on next load* call. */
+/** After SSR — persist trends; home grid only if no richer cache yet. */
 export function seedDashboardFromSsr(initial: DashboardInitialPayload): void {
-  seedCached(CACHE_KEYS.home(HOME_SSR_LIMIT, 0), {
-    videos: initial.homeVideos,
-    totalCount: null,
-  });
-  seedCached(CACHE_KEYS.trends, initial.trends);
+  const ssrVideos = filterDisplayableVideos(initial.homeVideos);
+  const existing = peekHomeGridCache();
+  if (!existing?.videos?.length || ssrVideos.length > existing.videos.length) {
+    persistHomeGridCache(ssrVideos);
+  }
+  seedCached(CACHE_KEYS.home(HOME_SSR_LIMIT, 0), { videos: ssrVideos, totalCount: null });
+  persistTrendsCache(initial.trends);
 }

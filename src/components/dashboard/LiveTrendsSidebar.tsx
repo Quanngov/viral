@@ -1,10 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GridVideo } from "@/lib/mock-data";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
-import { loadRealtimeTrends } from "@/lib/dashboard-fetch";
+import { loadRealtimeTrends, peekTrendsCache, persistTrendsCache } from "@/lib/dashboard-fetch";
 import { mapTrendsPayload, type LiveTrendVideo } from "@/lib/trends-display";
 import {
   MobileTrendCardSkeleton,
@@ -71,8 +71,8 @@ function useIsLargeScreen() {
   );
 }
 
-function useLiveTrends(enabled: boolean, ssrTrends: LiveTrendVideo[]) {
-  const [trends, setTrends] = useState<LiveTrendVideo[]>(ssrTrends);
+function useLiveTrends(enabled: boolean, initial: DashboardInitialPayload) {
+  const [trends, setTrends] = useState<LiveTrendVideo[]>(() => mapTrendsPayload(initial.trends));
   const [loaded, setLoaded] = useState(true);
   const [error, setError] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -91,6 +91,7 @@ function useLiveTrends(enabled: boolean, ssrTrends: LiveTrendVideo[]) {
     try {
       const { data } = await loadRealtimeTrends();
       if (!mountedRef.current) return;
+      persistTrendsCache(data);
       setTrends(mapTrendsPayload(data));
       setError(false);
       setLoaded(true);
@@ -132,6 +133,11 @@ function useLiveTrends(enabled: boolean, ssrTrends: LiveTrendVideo[]) {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [enabled, fetchTrends, startPolling, stopPolling]);
+
+  useEffect(() => {
+    const cached = peekTrendsCache();
+    if (cached?.trends?.length) setTrends(mapTrendsPayload(cached));
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -245,8 +251,7 @@ export function LiveTrendsSidebar({ initial, onVideoClick, variant = "sidebar" }
   const isLg = useIsLargeScreen();
   const isMobileHorizontal = variant === "mobile-horizontal";
   const shouldFetch = isMobileHorizontal ? !isLg : isLg;
-  const ssrTrends = useMemo(() => mapTrendsPayload(initial.trends), [initial.trends]);
-  const { trends, loaded, error, showSkeleton } = useLiveTrends(shouldFetch, ssrTrends);
+  const { trends, loaded, error, showSkeleton } = useLiveTrends(shouldFetch, initial);
 
   if (isMobileHorizontal) {
     if (isLg) return null;
