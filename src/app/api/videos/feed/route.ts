@@ -268,11 +268,6 @@ export async function POST(req: Request) {
   );
 
   if ((action === "search" || action === "more") && (wantYt || wantIg)) {
-    // Отмечаем внешний поиск для throttle (только для search)
-    if (action === "search") {
-      await markExternalSearchMade(q);
-    }
-
     await logAdminEvent({
       level: "info",
       type: "api_fetch",
@@ -326,6 +321,10 @@ export async function POST(req: Request) {
     const [ytRes, igRes] = await Promise.all([ytPromise, igPromise]);
     const ytSaved = "saved" in ytRes ? ytRes.saved : 0;
     const igSaved = igRes.saved;
+
+    if (action === "search" && ytSaved + igSaved > 0) {
+      await markExternalSearchMade(q);
+    }
 
     await logAdminEvent({
       level: "info",
@@ -388,7 +387,6 @@ export async function POST(req: Request) {
   });
 
   const tokensRemaining = await getTokenBalanceForUser(userId);
-  const totalCount = await prisma.video.count();
 
   const noMore = picked.length === 0 && action === "more";
 
@@ -410,7 +408,6 @@ export async function POST(req: Request) {
     tokensRemaining,
     videos: picked.map(videoToClientJson),
     noMore,
-    totalCount,
     userHint: feedUserHint,
   });
 }

@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Viral — Project Docs</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #3fb950;
+      --accent-dim: #238636;
+      --sidebar-w: 220px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .layout { display: flex; min-height: 100vh; }
+    aside {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1rem 0;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      overflow-y: auto;
+      z-index: 10;
+    }
+    .brand {
+      padding: 0 1rem 1rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0.5rem;
+    }
+    .brand small { display: block; color: var(--muted); font-weight: 400; font-size: 0.7rem; margin-top: 0.25rem; }
+    nav button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 0.5rem 1rem;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 0.875rem;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+    nav button:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    nav button.active { color: var(--text); border-left-color: var(--accent); background: rgba(63,185,80,0.08); }
+    main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 1.5rem 2rem 3rem;
+      max-width: 900px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .toolbar button, .toolbar .btn-primary {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .toolbar button:hover { border-color: var(--muted); }
+    .btn-primary { background: var(--accent-dim) !important; border-color: var(--accent) !important; color: #fff !important; font-weight: 600; }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .toast {
+      position: fixed; bottom: 1rem; right: 1rem;
+      background: var(--accent-dim); color: #fff;
+      padding: 0.5rem 1rem; border-radius: 6px;
+      font-size: 0.8rem; opacity: 0; transition: opacity 0.2s;
+      pointer-events: none; z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+    .content h1 { font-size: 1.75rem; margin: 0 0 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    .content h2 { font-size: 1.25rem; margin: 1.5rem 0 0.75rem; color: var(--accent); }
+    .content h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+    .content p { margin: 0.5rem 0; }
+    .content ul, .content ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+    .content li { margin: 0.25rem 0; }
+    .content hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+    .content blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 1rem; margin: 1rem 0;
+      color: var(--muted); font-size: 0.9rem;
+    }
+    .content code {
+      background: rgba(110,118,129,0.2);
+      padding: 0.15em 0.4em; border-radius: 4px;
+      font-size: 0.85em; font-family: ui-monospace, monospace;
+    }
+    .content pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+      font-size: 0.8rem;
+    }
+    .content pre code { background: none; padding: 0; }
+    .content table {
+      width: 100%; border-collapse: collapse;
+      margin: 0.75rem 0; font-size: 0.85rem;
+    }
+    .content th, .content td {
+      border: 1px solid var(--border);
+      padding: 0.4rem 0.6rem; text-align: left;
+    }
+    .content th { background: var(--surface); color: var(--accent); }
+    .content a { color: var(--accent); }
+    .content strong { color: #fff; }
+    .maintenance {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+    .maintenance h2 { font-size: 1rem; margin-top: 0; }
+    @media (max-width: 768px) {
+      aside { position: relative; width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+      .layout { flex-direction: column; }
+      main { margin-left: 0; padding: 1rem; }
+      nav { display: flex; flex-wrap: wrap; }
+      nav button { width: auto; border-left: none; border-bottom: 2px solid transparent; padding: 0.4rem 0.75rem; }
+      nav button.active { border-bottom-color: var(--accent); }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">Viral Docs<small>Generated 2026-05-31</small></div>
+      <nav id="nav"></nav>
+    </aside>
+    <main>
+      <div class="toolbar" id="toolbar"></div>
+      <article class="content" id="content"></article>
+      <section class="maintenance content" id="maintenance"></section>
+    </main>
+  </div>
+  <div class="toast" id="toast">Copied</div>
+  <script type="application/json" id="docs-json">{"docs":[{"id":"overview","label":"Overview","file":"00-project-overview.md"},{"id":"architecture","label":"Architecture","file":"01-architecture.md"},{"id":"changes","label":"Changes","file":"02-change-log.md"},{"id":"prompts","label":"Prompts","file":"03-ai-prompts.md"},{"id":"integrations","label":"Integrations","file":"04-services-and-integrations.md"},{"id":"decisions","label":"Decisions","file":"05-known-decisions.md"},{"id":"audits","label":"Audits","file":"06-audits.md"},{"id":"roadmap","label":"Roadmap","file":"07-roadmap.md"}],"contents":{"overview":"# Viral — Project Overview\n\n> Single source of truth entry point. Last updated: 2026-05-30.\n\n## What this is\n\n**Viral** is a Next.js dashboard for discovering short-form videos (YouTube Shorts, Instagram Reels), tracking competitors, saving videos, viewing live trends, and generating scripts via DeepSeek.\n\n- **Runtime:** Next.js 16 (App Router), React 19, TypeScript\n- **Database:** PostgreSQL (Supabase) via Prisma 6\n- **Auth:** NextAuth v5 (JWT) + app `SessionUser` + cookie bridge\n- **Monetization:** Internal token wallet (`UserTokenBalance`)\n\n## Repository map\n\n| Path | Purpose |\n|------|---------|\n| `src/app/page.tsx` | SSR home → `HomeDashboard` |\n| `src/app/home-dashboard.tsx` | Dashboard shell, tabs, providers |\n| `src/app/api/**` | 34 API route handlers |\n| `src/lib/**` | Domain logic, ingest, tokens, trends, AI |\n| `src/components/dashboard/**` | Dashboard UI (intentionally stable layout) |\n| `prisma/schema.prisma` | Postgres schema |\n| `docs/BACKEND_ARCHITECTURE.md` | Backend guardrails (canonical for API/Prisma edits) |\n| `docs/project-audit-master.md` | Full CodeGraph audit (2026-05-30) |\n| `project-docs/` | This knowledge base |\n\n## Main user flows\n\n1. **Home / Search** — `SearchResultsSection` → `POST /api/videos/feed` (DB pick + optional YouTube/TikHub ingest)\n2. **Competitors** — `CompetitorSpySection` → `/api/competitors/*`\n3. **Saved** — `SavedVideosContext` → `/api/saved-videos`\n4. **Scripts** — `ScriptGeneratorSection` → `/api/script-generator/*` + DeepSeek\n5. **Trends** — `LiveTrendsSidebar` polls `GET /api/trends/realtime`; heavy refresh via `POST /api/trends/lazy-refresh`\n\n## Dev commands\n\n```bash\nnpm install\nnpx prisma generate\nnpx prisma migrate dev\nnpm run dev          # http://localhost:3000\nnpm run build\nnpm run seed:youtube\n```\n\n## Related docs\n\n- Backend rules: `docs/BACKEND_ARCHITECTURE.md`\n- Agent rules: `AGENTS.md`\n- Audits: `project-docs/06-audits.md`, `docs/project-audit-master.md`\n\n## Viewing the knowledge dashboard\n\nOpen **`project-docs/dashboard.html`** directly in a browser (no server):\n\n```\nfile:///.../viral/project-docs/dashboard.html\n```\n\nMarkdown files are the source of truth. After editing them, regenerate the dashboard:\n\n```bash\nnode project-docs/build-dashboard.mjs\n```\n\n","architecture":"# Architecture\n\n> Derived from `docs/BACKEND_ARCHITECTURE.md`, codebase, and CodeGraph audits.\n\n## Layers\n\n| Layer | Path | Responsibility |\n|-------|------|----------------|\n| Route handlers | `src/app/api/**/route.ts` | HTTP: parse input, call lib, return JSON |\n| Domain / DB | `src/lib/**` | Prisma, scoring, trends, tokens, feed ingest |\n| AI | `src/lib/deepseek-generate.ts`, `script-generator-prompt.ts` | External LLM; server-only |\n| Serialize | `src/lib/serialize-video.ts`, `format-video.ts` | DB → client DTO |\n| Session | `src/lib/token-wallet.ts` | `ensureSessionUser`, token spend/credit |\n\n**Target:** routes stay thin; heavy logic in `src/lib/`. In practice `videos/feed/route.ts` still orchestrates ingest inline.\n\n## Dashboard composition\n\n```\npage.tsx (SSR fetchDashboardInitialPayload)\n  └── HomeDashboard\n        ├── AuthSessionProvider\n        ├── ToastProvider\n        ├── SavedVideosProvider\n        └── DashboardLayout\n              ├── aside: LiveTrendsSidebar + UserPanel (desktop)\n              └── main: DashboardTabPanel × tabs (hidden, not unmounted)\n                    ├── home: SearchResultsSection\n                    ├── competitors: CompetitorSpySection\n                    ├── saved: SavedVideosSection\n                    └── scripts: ScriptsSection → ScriptGeneratorSection\n```\n\n- Tab state: URL via `src/lib/dashboard-tab-url.ts`\n- `DashboardTabPanel`: keeps children mounted, toggles `hidden`\n- Pool protection: saved map/list fetches staggered 12s / 18s in `home-dashboard.tsx`\n\n## Auth model\n\n- **NextAuth** (`src/auth.ts`): Google + credentials, JWT session, `PrismaAdapter(getPrismaBase())`\n- **App user** (`SessionUser`): tokens, saved videos, chats, competitors\n- **Bridge** (`src/lib/auth-bridge.ts`): links `authUserId` to anonymous `viral_session_id` cookie on sign-in\n- **API entry:** `ensureSessionUser()` in `token-wallet.ts` — tries `auth()` first, else httpOnly cookie + DB row\n\n## Prisma clients\n\n| Export | File | Role |\n|--------|------|------|\n| `getPrismaBase()` | `prisma-base.ts` | Single `new PrismaClient()` — Auth adapter, register route |\n| `prisma` | `prisma.ts` | `getPrismaBase().$extends(...)` — Sentry on query errors (except `AdminEvent`) |\n\nRuntime app uses **one** underlying client; extended `prisma` wraps the same base (not a second pool).\n\n## Database\n\n- Provider: PostgreSQL (`DATABASE_URL` pooler + `DIRECT_URL` for migrations)\n- Legacy `prisma/dev.db`: migration/backup only, not runtime\n- Key models: `Video`, `SessionUser`, `UserTokenBalance`, `CompetitorAccount`, `ScriptChat`, `TrendItem`, `AdminEvent`, `AppRuntimeState`, `SearchCache`\n\n## Feed / search pipeline\n\n`POST /api/videos/feed`:\n\n1. `ensureSessionUser`\n2. Optional `searchQueryLog.create`\n3. `loadAndPick` — `video.findMany` (take 800) + in-memory filters + `pickSmartMixedBatch`\n4. If pool low / search needs fill: parallel `ingestYouTubeShortsForQuery` + TikHub Instagram upsert\n5. Second `loadAndPick` if ingest ran\n6. Token spend only on `action: \"more\"` (not initial search)\n\nExternal search throttle: `src/lib/search-throttle.ts` + `appRuntimeState` keys `external_search_{query}` (15 min).\n\n## Trends pipeline\n\n`ensure-trend-pool` → `TrendItem` queue → `GET /api/trends/realtime` (read-only poll) → sidebar. Heavy work: `POST /api/trends/lazy-refresh`.\n\n## Cache layers (client)\n\n- `src/lib/client-fetch-cache.ts` — memory + sessionStorage SWR, in-flight dedupe\n- `src/lib/dashboard-fetch.ts` — keyed loaders (home, trends, tokens, saved, competitors)\n- SSR seed: `seedDashboardFromSsr(initial)`\n- Home video count: lazy `GET /api/videos/home?countOnly=1` (filtered `HOME_VIDEO_WHERE`), not feed\n\n## Observability\n\n- stdout: `src/lib/server-log.ts`\n- `logAdminEvent()` — fail-safe, circuit breaker on pool errors (60s DB write cooldown)\n- Sentry: when `NEXT_PUBLIC_SENTRY_DSN` set; `captureDbError` via Prisma extension\n\n## Edit guardrails\n\n**Safe:** `src/lib/*`, `src/app/api/*`, `prisma/schema.prisma`, `scripts/*`\n\n**Avoid unless requested:**\n\n- `src/components/dashboard/*` layout (flex/grid/sticky/variants)\n- `src/app/home-dashboard.tsx` structure\n- Modal system, `LiveTrendsSidebar` polling interval UX\n- Mass `{ success, data }` migration of all endpoints\n\n## API conventions\n\n- Success payloads keep stable keys (`videos`, `balance`, `trends`, …)\n- New errors may use `{ success: false, error }` via `withApiRoute` / `apiError`\n- ~10 of 34 routes use `withApiRoute`; feed/transcribe/generate use manual handling\n","changes":"# Change Log\n\n> Engineering changes tracked for this knowledge base. Product changelog is not maintained here.\n\n## 2026-05-30 — External search & feed performance fixes\n\n**Files:** `src/lib/search-throttle.ts`, `src/app/api/videos/feed/route.ts`\n\n### 1. External search throttle timing\n\n- **Before:** `markExternalSearchMade(q)` ran before YouTube/TikHub ingest completed.\n- **After:** Throttle recorded only when `action === \"search\"` **and** `ytSaved + igSaved > 0` after ingest finishes.\n- **Why:** Failed or empty ingest no longer blocks external refill for 15 minutes.\n\n### 2. Fail-open on throttle read errors\n\n- **Before:** `canMakeExternalSearch` returned `false` on DB/`appRuntimeState` read failure.\n- **After:** Returns `true` in `catch` (fail-open); legitimate 15-minute throttle unchanged.\n- **Why:** Pool/DB glitches must not silently disable external search.\n\n### 3. Removed feed `totalCount`\n\n- **Before:** Every `POST /api/videos/feed` ran unfiltered `prisma.video.count()`.\n- **After:** `totalCount` omitted from feed response.\n- **Why:** Full-table count on every search/load-more; home UI already lazy-loads filtered count via `GET /api/videos/home?countOnly=1` (`queryHomeVideoCount` + `HOME_VIDEO_WHERE`).\n- **Client impact:** `SearchResultsSection` only sets stat when field present; home path unchanged.\n\n---\n\n## 2026-05-30 — Documentation\n\n- Added `docs/project-audit-master.md` (CodeGraph complexity + architecture audit).\n- Added `project-docs/` knowledge base (this folder).\n\n---\n\n## 2026-05-30 — Project knowledge base (`project-docs/`)\n\n- Added 8 markdown docs + `dashboard.html` (offline `file://` capable, embeds markdown).\n- Regenerate dashboard after edits: `node project-docs/build-dashboard.mjs`.\n\n---\n\n## Template for future entries\n\n```markdown\n## YYYY-MM-DD — Short title\n\n**Files:** `path/to/file.ts`\n\n- What changed\n- Why\n- User/API impact (if any)\n```\n","prompts":"# AI Prompts & Boundaries\n\n> Script generation only. Do not paste secrets here.\n\n## Stack\n\n| Piece | Location |\n|-------|----------|\n| HTTP to DeepSeek | `src/lib/deepseek-generate.ts` |\n| Prompt assembly | `src/lib/script-generator-prompt.ts` (`server-only`) |\n| Generate route | `src/app/api/script-generator/generate/route.ts` |\n| Shared client strings | `src/lib/script-shared-constants.ts` only |\n| Token cost | `SCRIPT_GENERATION_TOKEN_COST` env (default 20 in `.env.example`) |\n\n## Environment\n\n```env\nDEEPSEEK_API_KEY=\nDEEPSEEK_BASE_URL=https://api.deepseek.com\nDEEPSEEK_MODEL=deepseek-v4-flash\nSCRIPT_GENERATION_TOKEN_COST=20\n```\n\n## Request flow\n\n1. Client `ScriptGeneratorSection` → `POST /api/script-generator/generate`\n2. Route: `ensureSessionUser` → `spendTokens` → load chat + references from Prisma\n3. `buildDeepSeekMessages(profile, messages, referencesPrompt)` → `deepseekChatCompletion`\n4. On DB/DeepSeek failure after spend: `creditTokens` (refund)\n\nDeepSeek call: 60s abort timeout, `temperature: 0.55`, `max_tokens: 1800`.\n\n## Prompt policy (summary)\n\nFull text lives in `script-generator-prompt.ts`. Core rules:\n\n- **Role:** experienced editor/copywriter; output must not read as generic AI\n- **Banned:** cliché openers, bureaucratic phrasing, empty intensifiers, symmetric “first/second/third” lists\n- **Required:** varied sentence length, concrete detail, active voice, strong opening thought\n- **Permanent editorial policy:** no filler, conclusions before explanations, authorial stance, uniqueness over volume\n- **References:** video transcript/context via `buildReferencesPromptBlock`; ref-only prompt constant `SCRIPT_PROMPT_REF_ONLY`\n\n## Client/server boundary\n\n**Client must NOT import:**\n\n- `@/lib/prisma`\n- `script-chat-reference`\n- `script-generator-prompt`\n- `env-server`\n\n## Related APIs\n\n| Route | Purpose |\n|-------|---------|\n| `GET/POST /api/script-generator/chats` | Chat list / create |\n| `GET/DELETE /api/script-generator/chats/[chatId]` | Chat + messages |\n| `POST .../references`, `import-video`, `with-reference` | Attach videos |\n| `POST/GET /api/script-generator/profile` | User script profile |\n\n## Operational notes (from audits)\n\n- Generate route loads full message history each call — cost/latency grows with chat length\n- No streaming to client today\n- Refunds on failure are implemented; spend happens before AI call\n","integrations":"# Services & Integrations\n\n> From `.env.example` and code references. Variables not in `.env.example` but used in code are marked **(code only)**.\n\n## Database — Supabase / PostgreSQL\n\n| Variable | Purpose |\n|----------|---------|\n| `DATABASE_URL` | App runtime (pooler, port 6543, `pgbouncer=true`) |\n| `DIRECT_URL` | Migrations / `prisma db push` (direct port 5432) |\n\nClient: Prisma 6. Legacy SQLite `prisma/dev.db` — not runtime.\n\n## Auth — NextAuth v5\n\n| Variable | Purpose |\n|----------|---------|\n| `AUTH_SECRET` | Session signing |\n| `AUTH_URL` | e.g. `http://localhost:3000` |\n| `AUTH_TRUST_HOST` | `true` for dev/proxy |\n| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth |\n\nProviders: Google (with email linking), credentials (email/password via `passwordHash` on `User`).\n\n## YouTube Data API\n\n| Variable | Purpose |\n|----------|---------|\n| `YOUTUBE_API_KEY` | Search + video details |\n\nUsed in: `src/lib/youtube.ts`, `src/lib/feed/ingest-youtube.ts`, `src/app/api/youtube/search/route.ts`, feed ingest branch.\n\nAlso caches in Prisma `SearchCache` (12h TTL) on `GET /api/youtube/search` — separate from main feed search path.\n\n## TikHub — Instagram\n\n| Variable | Purpose |\n|----------|---------|\n| `TIKHUB_TOKEN` | **(code only)** — Bearer for TikHub API |\n\nUsed in: `src/lib/providers/tikhubInstagram.ts`, feed Instagram ingest, competitor reels sync.\n\nBase URLs (from code): `api.tikhub.io` — search reels, user reels, post info.\n\n## DeepSeek — Script generation\n\nSee `project-docs/03-ai-prompts.md`.\n\n## Groq — Transcription (Whisper)\n\n| Variable | Purpose |\n|----------|---------|\n| `GROQ_API_KEY` | **(code only)** — fallback transcription |\n\nUsed in: `src/app/api/videos/transcribe/route.ts` (120s fetch timeout). Primary path may use subtitles when available.\n\n## Sentry\n\n| Variable | Purpose |\n|----------|---------|\n| `NEXT_PUBLIC_SENTRY_DSN` | Error reporting |\n| `SENTRY_ENABLED` | Force on in dev |\n| `SENTRY_ENVIRONMENT` | Environment tag |\n| `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | Source maps upload (CI) |\n\n## Admin\n\n| Variable | Purpose |\n|----------|---------|\n| `ADMIN_SECRET` | `/admin?key=...` and `/api/admin/*` |\n\n## Internal token economy\n\n- Default balance on new `SessionUser`: 12_400 (`token-wallet.ts`)\n- Feed “show more”: 5 tokens default (`TOKEN_COST` in feed route)\n- Script generation: `SCRIPT_GENERATION_TOKEN_COST` (default 20)\n- Competitor Instagram reels refresh: 30 tokens (`competitors/[competitorId]/reels/route.ts`)\n\n## External dependency map\n\n```\nBrowser\n  → Next.js API routes\n       → PostgreSQL (Prisma)\n       → YouTube Data API (feed ingest, youtube/search)\n       → TikHub (Instagram search, competitor reels)\n       → DeepSeek (script generate)\n       → Groq (transcribe fallback)\n       → Sentry (errors)\n```\n","decisions":"# Known Decisions\n\n> Deliberate choices documented in code, backend docs, or audits. Not a wishlist.\n\n## Product & API\n\n| Decision | Rationale | Source |\n|----------|-----------|--------|\n| Stable JSON keys on success responses | Frontend depends on `videos`, `balance`, `trends`, etc. | `BACKEND_ARCHITECTURE.md` |\n| Initial feed search does not spend tokens | Only `action: \"more\"` calls `spendTokens` | `feed/route.ts` |\n| `force-dynamic` on home page | Fresh SSR payload each visit | `page.tsx` |\n| Dashboard tabs stay mounted (`hidden`) | Preserve scroll/state | `DashboardTabPanel.tsx`, backend guardrails |\n\n## Auth & sessions\n\n| Decision | Rationale | Source |\n|----------|-----------|--------|\n| Dual identity: NextAuth `User` + app `SessionUser` | Tokens/saved data on `SessionUser`; OAuth on `User` | `auth-bridge.ts`, schema |\n| Anonymous users via httpOnly `viral_session_id` | Use product before login | `token-wallet.ts` |\n| `ensureSessionUser()` is API session entry | Single helper for routes | `token-wallet.ts` |\n| Google `allowDangerousEmailAccountLinking: true` | Link Google to existing email account | `auth.ts` |\n\n## Search & ingest\n\n| Decision | Rationale | Source |\n|----------|-----------|--------|\n| 15-minute external search throttle per normalized query | Reduce YouTube/TikHub quota use | `search-throttle.ts` |\n| Throttle marked only after successful ingest (`saved > 0`) | Avoid locking users out on failed API | **2026-05-30 fix**, `feed/route.ts` |\n| Fail-open if throttle **read** fails | DB errors must not block ingest | **2026-05-30 fix**, `search-throttle.ts` |\n| Ingest runs inside feed HTTP request | No background queue yet | Audits, `feed/route.ts` |\n| `loadAndPick` fetches up to 800 rows then filters in memory | Smart-mix over candidate pool | `feed/route.ts` |\n\n## Performance & pool\n\n| Decision | Rationale | Source |\n|----------|-----------|--------|\n| Stagger saved map (12s) and list (18s) on dashboard load | Protect Supabase pool on free tier | `home-dashboard.tsx` |\n| Home count via lazy `/api/videos/home?countOnly=1` | Avoid expensive count on SSR paint | `dashboard-fetch.ts`, `dashboard-home.ts` |\n| No `totalCount` on feed response | Removed full-table count per request | **2026-05-30 fix** |\n| Trends realtime GET is read-only | Heavy discovery in `lazy-refresh` POST | `trends/realtime/route.ts`, backend doc |\n| AdminEvent circuit breaker on pool errors | Logging must not worsen outages | `admin-events.ts` |\n\n## AI\n\n| Decision | Rationale | Source |\n|----------|-----------|--------|\n| Prompts server-only | Security + IP | `script-generator-prompt.ts` |\n| Refund tokens on generate failure after spend | Fair billing | `generate/route.ts` |\n| 60s DeepSeek timeout | Prevent hung requests | `deepseek-generate.ts` |\n\n## Prisma\n\n| Decision | Rationale | Source |\n|----------|-----------|--------|\n| `prisma` = extended wrapper over `getPrismaBase()` | One engine; Sentry on queries | `prisma.ts`, focused audit |\n| Auth adapter uses base client without extension | Adapter compatibility | `prisma-base.ts`, `auth.ts` |\n\n## Intentionally deferred (BACKEND_ARCHITECTURE «Later»)\n\n- Unified `{ success, data }` on all routes\n- Repository layer over Prisma\n- OpenTelemetry / external logging\n- Note: backend doc says «NextAuth not in routes yet» — **stale**; `ensureSessionUser` already calls `auth()`\n","audits":"# Audits\n\n> Summary of CodeGraph audits and focused reviews. Full detail: `docs/project-audit-master.md`.\n\n## Audit history\n\n| Date | Type | Index / scope |\n|------|------|----------------|\n| 2026-05-30 | Complexity audit | 159 files, top-20 complex files by deps/fan-in/fan-out/state |\n| 2026-05-30 | Architecture audit | Dashboard, auth, cache, Prisma, script generator, scaling |\n| 2026-05-30 | Focused technical audit | External search, feed latency, trends polling |\n| 2026-05-30 | Engineering fixes | Throttle timing, fail-open read, feed `totalCount` removed |\n\n## Executive verdict (2026-05-30)\n\n**Solid early-production codebase** with strong operational patterns (pool protection, admin circuit breaker, client SWR cache, token refunds) and structural debt (fat routes, UI monoliths, sync ingest in HTTP).\n\n| Dimension | Score (1–5) |\n|-----------|-------------|\n| Product | 4 |\n| Architecture | 3 |\n| Maintainability | 2.5 |\n| Scalability | 2 |\n| User Experience | 3.5 |\n\n## Highest-complexity files (regression hotspots)\n\n| File | Why |\n|------|-----|\n| `src/app/api/videos/feed/route.ts` | Core search orchestration |\n| `src/lib/token-wallet.ts` | Billing + session hub |\n| `src/lib/admin-events.ts` | Observability hub (fan-in 26) |\n| `ScriptGeneratorSection.tsx` | ~1k lines UI monolith |\n| `CompetitorSpySection.tsx` | ~1k lines UI monolith |\n\n## Focused audit — issues & status\n\n| Issue | Severity | Status |\n|-------|----------|--------|\n| `markExternalSearchMade` before ingest | Medium | **Fixed** 2026-05-30 |\n| `canMakeExternalSearch` fail-closed on DB error | Medium | **Fixed** 2026-05-30 |\n| Unfiltered `video.count()` on every feed POST | Medium | **Fixed** 2026-05-30 |\n| Sync ingest in feed request (latency) | Medium–High | Open |\n| Trends poll continues off Home tab (desktop sidebar) | Low–Medium | Open |\n| ~70% routes without `withApiRoute` | Low–Medium | Open |\n| `mockWeeklyTrends` on home | Low | Open |\n\n## Prisma dual-client clarification\n\nAudits initially flagged «two pools». **Focused review:** runtime app uses one `getPrismaBase()` instance; `prisma` is `$extends` wrapper — not a second pool. Pool pressure comes from query volume (feed, AdminEvent writes), not duplicate clients.\n\n## Monitor in production\n\n- P2024 / Supabase pool timeouts\n- p95 `POST /api/videos/feed` with vs without ingest\n- AdminEvent circuit breaker activations (60s DB audit gap)\n- External ingest `saved: 0` rate in logs\n\n## Canonical full report\n\nSee **`docs/project-audit-master.md`** for architecture review, technical debt table, scaling notes, top-20 improvements, and 30-day plan.\n","roadmap":"# Roadmap\n\n> From `docs/project-audit-master.md` and post-audit fix status. Not a commitment schedule.\n\n## Completed (2026-05-30)\n\n- [x] External search throttle after successful ingest only\n- [x] Fail-open `canMakeExternalSearch` on DB read errors\n- [x] Remove wasteful `prisma.video.count()` from feed response\n\n## Next 30 days (from audit — adjusted)\n\n| # | Item | Priority | Notes |\n|---|------|----------|-------|\n| 1 | Extract feed orchestration to `lib/feed/*` | P0 | Keep JSON contract stable |\n| 2 | Rate limits on feed, lazy-refresh, generate | P0 | Pool + abuse protection |\n| 3 | Minimal job queue for ingest / lazy-refresh | P0 | Remove sync work from HTTP |\n| 4 | Split `ScriptGeneratorSection` + dynamic import scripts tab | P0 | Reduce bundle / regression radius |\n| 5 | Cap script chat history sent to DeepSeek | P1 | Cost + latency |\n| 6 | Prisma/Supabase pool runbook in docs | P1 | P2024, feed p95 |\n| 7 | Remove or replace `mockWeeklyTrends` | P1 | Home tab credibility |\n| 8 | `withApiRoute` on feed, transcribe, generate | P1 | One route per week + smoke test |\n| 9 | Consolidate saved map + list client fetches | P1 | Fewer duplicate calls |\n| 10 | Document `DashboardTabPanel` mount policy; audit `active` guards | P1 | Background request waste |\n\n## Backlog (Important / Later)\n\n**Important (P1):** Split `CompetitorSpySection`; bounded cleanup for `appRuntimeState` keys; `maxDuration` on generate route.\n\n**Later (P2+):** Unified API error shape migration; repository layer; ISR for static shell; HTTP cache headers on GET APIs; DeepSeek streaming; OpenTelemetry.\n\n## Explicitly not planned here\n\nItems listed under «Later (not now)» in `docs/BACKEND_ARCHITECTURE.md` remain deferred unless product asks.\n\n## How to update this file\n\n1. Move completed items to **Completed** with date.\n2. Add new items only when decided — link to `02-change-log.md` for shipped work.\n3. Do not duplicate full audit prose — point to `06-audits.md`.\n"}}</script>
+  <script>
+(function () {
+  "use strict";
+
+  var payload = JSON.parse(document.getElementById("docs-json").textContent);
+  var DOCS = payload.docs;
+  var CONTENTS = payload.contents;
+
+  var MAINTENANCE_MD =
+    "## How to update documentation\n\n" +
+    "| What | Where |\n" +
+    "|------|-------|\n" +
+    "| Shipped code changes | `02-change-log.md` |\n" +
+    "| Architecture / structure | `01-architecture.md` |\n" +
+    "| New env vars / APIs | `04-services-and-integrations.md` |\n" +
+    "| Deliberate trade-offs | `05-known-decisions.md` |\n" +
+    "| AI prompt policy changes | `03-ai-prompts.md` (summary; full text in `script-generator-prompt.ts`) |\n" +
+    "| Audit results | `06-audits.md` + `docs/project-audit-master.md` |\n" +
+    "| Planned work | `07-roadmap.md` |\n" +
+    "| Project summary | `00-project-overview.md` |\n\n" +
+    "After editing any `.md` file, regenerate this dashboard:\n\n" +
+    "```bash\nnode project-docs/build-dashboard.mjs\n```\n\n" +
+    "Markdown files are the source of truth. `dashboard.html` embeds them for offline `file://` use.";
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function inlineFormat(s) {
+    s = escapeHtml(s);
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    return s;
+  }
+
+  function isSeparatorRow(row) {
+    return row.every(function (c) {
+      return /^[-:\s|]+$/.test(c.trim());
+    });
+  }
+
+  function renderMarkdown(md) {
+    var lines = md.replace(/\r\n/g, "\n").split("\n");
+    var html = [];
+    var i = 0;
+    var inCode = false;
+    var codeBuf = [];
+    var tableBuf = null;
+
+    function flushTable() {
+      if (!tableBuf || tableBuf.length < 1) return;
+      html.push("<table>");
+      tableBuf.forEach(function (row, ri) {
+        if (ri === 1 && isSeparatorRow(row)) return;
+        var tag = ri === 0 ? "th" : "td";
+        html.push(
+          "<tr>" +
+            row
+              .map(function (c) {
+                return "<" + tag + ">" + inlineFormat(c.trim()) + "</" + tag + ">";
+              })
+              .join("") +
+            "</tr>",
+        );
+      });
+      html.push("</table>");
+      tableBuf = null;
+    }
+
+    while (i < lines.length) {
+      var line = lines[i];
+
+      if (line.startsWith("```")) {
+        if (inCode) {
+          html.push("<pre><code>" + escapeHtml(codeBuf.join("\n")) + "</code></pre>");
+          codeBuf = [];
+          inCode = false;
+        } else {
+          flushTable();
+          inCode = true;
+        }
+        i++;
+        continue;
+      }
+      if (inCode) {
+        codeBuf.push(line);
+        i++;
+        continue;
+      }
+
+      if (/^\|.+\|$/.test(line.trim())) {
+        if (!tableBuf) tableBuf = [];
+        tableBuf.push(line.split("|").slice(1, -1));
+        i++;
+        continue;
+      }
+      flushTable();
+
+      if (/^---+$/.test(line.trim())) {
+        html.push("<hr>");
+        i++;
+        continue;
+      }
+      if (/^# (.+)$/.test(line)) {
+        html.push("<h1>" + inlineFormat(line.slice(2)) + "</h1>");
+        i++;
+        continue;
+      }
+      if (/^## (.+)$/.test(line)) {
+        html.push("<h2>" + inlineFormat(line.slice(3)) + "</h2>");
+        i++;
+        continue;
+      }
+      if (/^### (.+)$/.test(line)) {
+        html.push("<h3>" + inlineFormat(line.slice(4)) + "</h3>");
+        i++;
+        continue;
+      }
+      if (/^> (.+)$/.test(line)) {
+        html.push("<blockquote>" + inlineFormat(line.slice(2)) + "</blockquote>");
+        i++;
+        continue;
+      }
+      if (/^[-*] (.+)$/.test(line)) {
+        html.push("<ul>");
+        while (i < lines.length && /^[-*] (.+)$/.test(lines[i])) {
+          html.push("<li>" + inlineFormat(lines[i].replace(/^[-*] /, "")) + "</li>");
+          i++;
+        }
+        html.push("</ul>");
+        continue;
+      }
+      if (/^\d+\. (.+)$/.test(line)) {
+        html.push("<ol>");
+        while (i < lines.length && /^\d+\. (.+)$/.test(lines[i])) {
+          html.push("<li>" + inlineFormat(lines[i].replace(/^\d+\. /, "")) + "</li>");
+          i++;
+        }
+        html.push("</ol>");
+        continue;
+      }
+      if (line.trim() === "") {
+        i++;
+        continue;
+      }
+      html.push("<p>" + inlineFormat(line) + "</p>");
+      i++;
+    }
+    flushTable();
+    if (inCode && codeBuf.length) {
+      html.push("<pre><code>" + escapeHtml(codeBuf.join("\n")) + "</code></pre>");
+    }
+    return html.join("\n");
+  }
+
+  function getText(id) {
+    return CONTENTS[id] || "";
+  }
+
+  function getAllText() {
+    return DOCS.map(function (d) {
+      return "=== " + d.label.toUpperCase() + " ===\n\n" + getText(d.id);
+    }).join("\n\n");
+  }
+
+  function buildSnapshot() {
+    var openIssues = [
+      "Sync ingest in feed HTTP request (latency)",
+      "Trends poll continues off Home tab on desktop",
+      "~70% API routes without withApiRoute",
+      "mockWeeklyTrends on home tab",
+      "ScriptGeneratorSection / CompetitorSpySection UI monoliths",
+    ].join("\n- ");
+
+    return (
+      "# Viral Project Snapshot\n" +
+      "Generated: " +
+      new Date().toISOString().slice(0, 10) +
+      "\n\n" +
+      "## Overview\n" +
+      getText("overview") +
+      "\n\n" +
+      "## Architecture (summary)\n" +
+      getText("architecture") +
+      "\n\n" +
+      "## Latest changes\n" +
+      getText("changes") +
+      "\n\n" +
+      "## Active integrations\n" +
+      getText("integrations") +
+      "\n\n" +
+      "## Key decisions\n" +
+      getText("decisions") +
+      "\n\n" +
+      "## Audit summary\n" +
+      getText("audits") +
+      "\n\n" +
+      "## Open issues (from audits / roadmap)\n- " +
+      openIssues +
+      "\n\n" +
+      "## Roadmap\n" +
+      getText("roadmap")
+    );
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(showToast).catch(function () {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      showToast();
+    } catch (e) {
+      alert("Copy failed");
+    }
+    document.body.removeChild(ta);
+  }
+
+  function showToast() {
+    var t = document.getElementById("toast");
+    t.classList.add("show");
+    setTimeout(function () {
+      t.classList.remove("show");
+    }, 1500);
+  }
+
+  var nav = document.getElementById("nav");
+  var toolbar = document.getElementById("toolbar");
+  var content = document.getElementById("content");
+  var maintenance = document.getElementById("maintenance");
+
+  DOCS.forEach(function (d, idx) {
+    var btn = document.createElement("button");
+    btn.textContent = d.label;
+    btn.dataset.id = d.id;
+    btn.addEventListener("click", function () {
+      showDoc(d.id);
+    });
+    nav.appendChild(btn);
+    if (idx === 0) btn.classList.add("active");
+  });
+
+  var copyDefs = [
+    { label: "Copy All", fn: getAllText, primary: false },
+    { label: "Copy Project Snapshot", fn: buildSnapshot, primary: true },
+    { label: "Copy Overview", fn: function () { return getText("overview"); } },
+    { label: "Copy Architecture", fn: function () { return getText("architecture"); } },
+    { label: "Copy Changes", fn: function () { return getText("changes"); } },
+    { label: "Copy Prompts", fn: function () { return getText("prompts"); } },
+    { label: "Copy Integrations", fn: function () { return getText("integrations"); } },
+    { label: "Copy Decisions", fn: function () { return getText("decisions"); } },
+    { label: "Copy Audits", fn: function () { return getText("audits"); } },
+    { label: "Copy Roadmap", fn: function () { return getText("roadmap"); } },
+  ];
+
+  copyDefs.forEach(function (c) {
+    var b = document.createElement("button");
+    b.textContent = c.label;
+    if (c.primary) b.className = "btn-primary";
+    b.addEventListener("click", function () {
+      copyText(c.fn());
+    });
+    toolbar.appendChild(b);
+  });
+
+  function showDoc(id) {
+    content.innerHTML = renderMarkdown(getText(id));
+    nav.querySelectorAll("button").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.id === id);
+    });
+    try {
+      if (location.hash !== "#" + id) {
+        history.replaceState(null, "", "#" + id);
+      }
+    } catch (e) {
+      /* file:// may restrict history in some browsers */
+    }
+  }
+
+  maintenance.innerHTML = renderMarkdown(MAINTENANCE_MD);
+
+  var hash = "";
+  try {
+    hash = location.hash.slice(1);
+  } catch (e) {
+    hash = "";
+  }
+  var initial = DOCS.some(function (d) {
+    return d.id === hash;
+  })
+    ? hash
+    : DOCS[0].id;
+  showDoc(initial);
+})();
+
+  </script>
+</body>
+</html>

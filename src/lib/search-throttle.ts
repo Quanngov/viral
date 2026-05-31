@@ -29,7 +29,8 @@ export async function canMakeExternalSearch(query: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error("Failed to check external search throttle:", error);
-    return false;
+    // Fail-open: DB/runtime state errors must not block external ingest.
+    return true;
   }
 }
 
