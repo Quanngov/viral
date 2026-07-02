@@ -1,9 +1,9 @@
 "use client";
 
 import { memo, useEffect, useState, type ReactNode } from "react";
-import Image from "next/image";
 import type { GridVideo } from "@/lib/mock-data";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
 import { SaveBookmarkButton } from "@/components/dashboard/SaveBookmarkButton";
 import { VideoDetailTranscript } from "@/components/dashboard/VideoDetailTranscript";
 import { MockScriptGeneratorModal, MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
@@ -69,12 +69,6 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, activeVi
   const embedUrl = canEmbedYoutube ? `https://www.youtube.com/embed/${youtubeId}` : "";
   const canPlayMp4 = Boolean(video.videoUrl?.trim());
 
-  const thumbIsIg =
-    platform === "instagram" ||
-    platform === "tiktok" ||
-    (video.thumbnailUrl?.includes("cdninstagram") ?? false) ||
-    (video.thumbnailUrl?.includes("fbcdn.net") ?? false);
-
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 md:p-6">
       <button
@@ -136,24 +130,18 @@ export const VideoDetailPanel = memo(function VideoDetailPanel({ video, activeVi
                   />
                 ) : (
                   <>
-                    {thumbIsIg ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={video.thumbnailUrl}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <Image
-                        src={video.thumbnailUrl}
-                        alt=""
-                        fill
-                        className="object-cover"
-                        sizes="420px"
-                        loading="lazy"
-                      />
-                    )}
+                    <VideoThumbnail
+                      platform={video.platform}
+                      externalId={video.externalId ?? youtubeId}
+                      clientId={video.id}
+                      thumbnailUrl={video.thumbnailUrl}
+                      alt=""
+                      fill
+                      sizes="420px"
+                      className="absolute inset-0"
+                      imageClassName="object-cover"
+                      native={platform === "instagram" || platform === "tiktok"}
+                    />
                     {canPlayMp4 || canEmbedYoutube ? (
                       <button
                         type="button"

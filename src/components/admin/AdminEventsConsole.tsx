@@ -87,7 +87,7 @@ export function AdminEventsConsole({ appendKey }: { appendKey: (path: string) =>
   }, [events]);
 
   return (
-    <section className="flex max-h-[calc(100vh-8rem)] flex-col rounded-2xl border border-zinc-200 bg-white shadow-sm shadow-zinc-900/5 xl:sticky xl:top-6">
+    <section className="flex max-h-[calc(100dvh-10rem)] flex-col rounded-xl border border-zinc-200/80 bg-white xl:max-h-[calc(100dvh-12rem)]">
       <div className="border-b border-zinc-100 px-4 py-3">
         <h2 className="text-sm font-semibold text-zinc-900">Консоль событий</h2>
         <p className="mt-0.5 text-[11px] text-zinc-500">Обновление каждые 5 с · без секретов в meta</p>

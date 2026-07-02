@@ -88,14 +88,27 @@ async function loadAndPick(args: {
   const matching = rows.filter((v) => videoMatchesFeedFilters(v, args.filters, args.now));
   const unseen = matching.filter((v) => !args.seen.has(videoClientId(v.platform, v.externalId)));
   const sortedPool = sortVideosList(unseen, args.sort) as Video[];
-  const picked = pickFeedBatch(sortedPool, args.batchIndex, BATCH, {
-    mode: args.mixMode,
-    now: args.now,
-    platformFilter: args.filters.platform,
-    minViewsFloor: args.filters.minViews,
-    mixSeed: args.mixSeed,
-    sort: args.sort,
-  });
+
+  const picked: Video[] = [];
+  let batchIdx = args.batchIndex;
+  while (picked.length < BATCH && batchIdx < args.batchIndex + 12) {
+    const batch = pickFeedBatch(sortedPool, batchIdx, BATCH, {
+      mode: args.mixMode,
+      now: args.now,
+      platformFilter: args.filters.platform,
+      minViewsFloor: args.filters.minViews,
+      mixSeed: args.mixSeed,
+      sort: args.sort,
+    });
+    for (const v of batch) {
+      if (picked.some((p) => p.id === v.id)) continue;
+      picked.push(v);
+      if (picked.length >= BATCH) break;
+    }
+    if (batch.length === 0) break;
+    batchIdx += 1;
+  }
+
   return {
     picked,
     unseenCount: unseen.length,

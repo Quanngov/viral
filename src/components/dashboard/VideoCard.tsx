@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { GridVideo } from "@/lib/mock-data";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
 import { reportThumbnailLoadFailure } from "@/lib/report-thumbnail-failure";
+import { resolveThumbnailUrl, VIRAL_THUMBNAIL_PLACEHOLDER } from "@/lib/video-thumbnail";
 
 const DEBUG_FIRST =
   typeof process !== "undefined" && process.env.NODE_ENV === "development";
@@ -38,12 +40,8 @@ function resolveExternalId(video: GridVideo): string | null {
 
 function resolveThumbSrc(video: GridVideo, platform: string): string | null {
   const extId = resolveExternalId(video);
-  const raw = video.thumbnailUrl?.trim();
-  if (raw) return raw;
-  if (platform === "youtube" && extId) {
-    return `https://i.ytimg.com/vi/${extId}/hqdefault.jpg`;
-  }
-  return null;
+  const resolved = resolveThumbnailUrl(platform, extId, video.thumbnailUrl, video.id);
+  return resolved || null;
 }
 
 export function VideoCard({
@@ -136,14 +134,6 @@ export function VideoCard({
   ]);
 
   if (!video.title?.trim()) return null;
-  if (platform === "instagram" && imgFailed) return null;
-  if (showIconFallback && !thumbSrc) {
-    /* no usable preview — parent filter should drop these; safety */
-    if (debugFirst && DEBUG_FIRST) {
-      console.warn("[VideoCard:first] skipped — no thumbnail", video.id);
-    }
-    return null;
-  }
 
   return (
     <button
@@ -163,6 +153,15 @@ export function VideoCard({
             loading={priority ? "eager" : "lazy"}
             decoding="async"
             fetchPriority={priority ? "high" : "auto"}
+          />
+        ) : null}
+
+        {showIconFallback && imgFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={VIRAL_THUMBNAIL_PLACEHOLDER}
+            alt=""
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full object-contain p-6 opacity-40"
           />
         ) : null}
 

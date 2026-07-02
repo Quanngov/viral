@@ -1,6 +1,7 @@
 import type { Video } from "@prisma/client";
 import type { PeriodApi, FeedPlatformMode } from "@/lib/search-query";
 import { isPublishedWithinPeriod } from "@/lib/period-filter";
+import { videoRowHasDisplayableThumbnail } from "@/lib/thumbnail-pipeline";
 
 export type FeedLanguageMode = "world" | "ru" | "en";
 
@@ -57,6 +58,7 @@ export function videoMatchesPlatform(v: Video, mode: FeedPlatformMode): boolean 
 }
 
 export function videoMatchesFeedFilters(v: Video, f: FeedFilterPayload, now = new Date()): boolean {
+  if (!videoRowHasDisplayableThumbnail(v)) return false;
   if (!videoMatchesPlatform(v, f.platform)) return false;
   if (v.views < f.minViews) return false;
   if (!isPublishedWithinPeriod(v.publishedAt, f.period, now)) return false;

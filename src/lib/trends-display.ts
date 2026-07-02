@@ -1,4 +1,5 @@
 import type { TrendsPayload } from "@/lib/dashboard-fetch";
+import { isDisplayableTrendVideo } from "@/lib/grid-video-display";
 
 export type LiveTrendVideo = {
   id: string;
@@ -24,7 +25,9 @@ export function mapTrendsPayload(data: TrendsPayload): LiveTrendVideo[] {
   const trendItems = data.trends as TrendItem[];
   const newItems = data.newItems as { id: string }[];
 
-  return trendItems.map((item, index) => {
+  return trendItems
+    .filter((item) => isDisplayableTrendVideo(item.video))
+    .map((item, index) => {
     const isNew = newItems.some((n) => n.id === item.id);
     const viewsRaw = item.video?.views;
     const viewsNum =

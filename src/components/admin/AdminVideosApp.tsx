@@ -1,10 +1,11 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-import { AdminEventsConsole } from "@/components/admin/AdminEventsConsole";
-import { AdminBillingPanel } from "@/components/admin/AdminBillingPanel";
+import { AdminPageHeader } from "@/components/admin/shell/AdminPageHeader";
+import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
+import { AdminStat } from "@/components/admin/shell/AdminPrimitives";
+import { formatDt } from "@/components/admin/admin-utils";
 
 export type AdminVideoRow = {
   id: string;
@@ -72,22 +73,7 @@ function thumbSrc(v: AdminVideoRow): string {
   return `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg`;
 }
 
-function formatDt(iso: string | null | undefined) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function AdminVideosInner() {
+export function AdminVideosInner() {
   const searchParams = useSearchParams();
   const adminKey = searchParams.get("key");
 
@@ -122,15 +108,6 @@ function AdminVideosInner() {
   const [metaError, setMetaError] = useState<string | null>(null);
   const [tableError, setTableError] = useState<string | null>(null);
 
-  type ApiHealth = {
-    tikhub: string;
-    youtube: string;
-    deepseek: string;
-    groq: string;
-    database: string;
-  };
-  const [apiHealth, setApiHealth] = useState<ApiHealth | null>(null);
-
   const [detail, setDetail] = useState<AdminVideoRow | null>(null);
 
   useEffect(() => {
@@ -164,23 +141,6 @@ function AdminVideosInner() {
       }
     }
     loadMeta();
-    return () => {
-      cancel = true;
-    };
-  }, [appendKey]);
-
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      try {
-        const res = await fetch(appendKey("/api/admin/health"));
-        if (!res.ok) return;
-        const h = (await res.json()) as ApiHealth;
-        if (!cancel) setApiHealth(h);
-      } catch {
-        if (!cancel) setApiHealth(null);
-      }
-    })();
     return () => {
       cancel = true;
     };
@@ -254,64 +214,27 @@ function AdminVideosInner() {
     : ["all", "youtube", "instagram"];
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      <header className="border-b border-zinc-200 bg-white px-8 py-6">
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Админка · база роликов</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Только чтение из локальной БД. YouTube API не используется.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <AdminPageHeader
+        status="live"
+        title="Видео"
+        description="База роликов ViralCloud. Read-only из Postgres — сортировка, фильтры, детальная карточка."
+      />
 
-      <main className="mx-auto max-w-[1800px] space-y-6 px-8 py-6">
-        {apiHealth ? (
-          <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
-            <h2 className="text-sm font-semibold text-zinc-900">Статус API</h2>
-            <p className="mt-1 text-xs text-zinc-500">Только факт наличия ключей в окружении, без значений.</p>
-            <ul className="mt-3 grid gap-2 text-sm text-zinc-800 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-              <li>
-                <span className="font-medium">TikHub:</span>{" "}
-                {apiHealth.tikhub === "connected" ? "подключен" : "не задан"}
-              </li>
-              <li>
-                <span className="font-medium">YouTube:</span>{" "}
-                {apiHealth.youtube === "connected" ? "подключен" : "не задан"}
-              </li>
-              <li>
-                <span className="font-medium">DeepSeek:</span>{" "}
-                {apiHealth.deepseek === "connected" ? "подключен" : "не задан"}
-              </li>
-              <li>
-                <span className="font-medium">Groq:</span>{" "}
-                {apiHealth.groq === "connected" ? "подключен" : "не задан"}
-              </li>
-              <li>
-                <span className="font-medium">DATABASE_URL:</span>{" "}
-                {apiHealth.database === "connected" ? "подключен" : "не задан"}
-              </li>
-            </ul>
-          </section>
-        ) : null}
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <AdminStat label="Всего" highlight value={stats ? stats.totalVideos : "—"} />
+        <AdminStat label="YouTube" value={stats ? stats.youtubeCount : "—"} />
+        <AdminStat label="Instagram" value={stats ? stats.instagramCount : "—"} />
+        <AdminStat label="Средний score" value={stats?.avgScore != null ? stats.avgScore : "—"} />
+        <AdminStat label="Макс. просмотров" value={stats ? stats.maxViews.toLocaleString("ru-RU") : "—"} />
+        <AdminStat label="Активность" value={stats ? formatDt(stats.lastActivityAt) : "—"} small />
+      </section>
 
-        <AdminBillingPanel appendKey={appendKey} />
+      {metaError ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{metaError}</p>
+      ) : null}
 
-        <TrendsQueueSection />
-
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Всего роликов" highlight value={stats ? stats.totalVideos : "—"} />
-          <StatCard label="YouTube" value={stats ? stats.youtubeCount : "—"} />
-          <StatCard label="Instagram" value={stats ? stats.instagramCount : "—"} />
-          <StatCard label="Средний score" value={stats?.avgScore != null ? stats.avgScore : "—"} />
-          <StatCard label="Макс. просмотров" value={stats ? stats.maxViews.toLocaleString("ru-RU") : "—"} />
-          <StatCard label="Последняя активность" value={stats ? formatDt(stats.lastActivityAt) : "—"} small />
-        </section>
-
-        {metaError ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{metaError}</p>
-        ) : null}
-
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="space-y-6">
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
+      <section className="rounded-xl border border-zinc-200/80 bg-white p-4">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex min-w-[220px] flex-1 flex-col gap-1">
               <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Поиск</span>
@@ -349,7 +272,7 @@ function AdminVideosInner() {
           </div>
         </section>
 
-        {tableError ? (
+      {tableError ? (
           <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{tableError}</p>
         ) : null}
 
@@ -406,7 +329,16 @@ function AdminVideosInner() {
                     >
                       <td className="sticky left-0 z-[1] bg-white px-2 py-2 hover:bg-emerald-50/50">
                         <div className="relative h-11 w-[62px] overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200">
-                          <Image src={thumbSrc(v)} alt="" fill sizes="62px" className="object-cover" />
+                          <VideoThumbnail
+                            platform={v.platform}
+                            externalId={v.externalId}
+                            thumbnailUrl={thumbSrc(v)}
+                            alt=""
+                            fill
+                            sizes="62px"
+                            imageClassName="object-cover"
+                            native={v.platform === "instagram"}
+                          />
                         </div>
                       </td>
                       <td className="px-2 py-2 font-medium">{v.platform}</td>
@@ -509,43 +441,12 @@ function AdminVideosInner() {
             </div>
           </footer>
         </section>
-          </div>
-
-          <AdminEventsConsole appendKey={appendKey} />
-        </div>
-      </main>
 
       {detail ? <DetailModal video={detail} onClose={() => setDetail(null)} /> : null}
     </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  highlight,
-  small,
-}: {
-  label: string;
-  value: string | number;
-  highlight?: boolean;
-  small?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-2xl border px-4 py-3 shadow-sm ${
-        highlight ? "border-emerald-200 bg-emerald-50/90 shadow-emerald-900/5" : "border-zinc-200 bg-white shadow-zinc-900/5"
-      }`}
-    >
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
-      <p
-        className={`mt-1 font-semibold tabular-nums text-zinc-900 ${small ? "text-xs leading-snug" : "text-lg"} ${highlight ? "text-emerald-900" : ""}`}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
 
 function FilterSelect({
   label,
@@ -619,7 +520,16 @@ function DetailModal({ video, onClose }: { video: AdminVideoRow; onClose: () => 
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-zinc-900/5">
-            <Image src={thumbSrc(video)} alt="" fill className="object-cover" sizes="480px" />
+            <VideoThumbnail
+              platform={video.platform}
+              externalId={video.externalId}
+              thumbnailUrl={thumbSrc(video)}
+              alt=""
+              fill
+              imageClassName="object-cover"
+              sizes="480px"
+              native={video.platform === "instagram"}
+            />
           </div>
           {video.description ? (
             <p className="mt-4 text-sm leading-relaxed text-zinc-600">{video.description}</p>
@@ -680,168 +590,13 @@ function DetailRow({ k, v, link, mono }: { k: string; v: string; link?: boolean;
   );
 }
 
-type TrendItem = {
-  id: string;
-  videoId: string;
-  status: string;
-  trendScore: number;
-  reason: string | null;
-  source: string | null;
-  detectedAt: string;
-  releaseAt: string | null;
-  publishedAt: string | null;
-  video: {
-    title: string;
-    platform: string;
-    authorUsername: string | null;
-    views: number;
-    rating: number;
-    publishedAt: string;
-  };
-};
-
-function TrendsQueueSection() {
-  const [trends, setTrends] = useState<TrendItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>("all");
-
-  useEffect(() => {
-    async function loadTrends() {
-      try {
-        const response = await fetch("/api/admin/trends");
-        const data = await response.json();
-        if (Array.isArray(data.trends)) {
-          setTrends(data.trends);
-        }
-      } catch (error) {
-        console.error("Failed to load trends queue:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadTrends();
-  }, []);
-
-  const filteredTrends = useMemo(() => {
-    if (filter === "all") return trends;
-    return trends.filter(t => t.status === filter);
-  }, [trends, filter]);
-
-  const statusCounts = useMemo(() => {
-    const counts = { queued: 0, published: 0, archived: 0, rejected: 0 };
-    trends.forEach(t => {
-      if (t.status in counts) {
-        counts[t.status as keyof typeof counts]++;
-      }
-    });
-    return counts;
-  }, [trends]);
-
-  return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-900">Очередь трендов</h2>
-          <p className="mt-1 text-xs text-zinc-500">
-            Кандидаты в тренды из детектора базы данных
-          </p>
-        </div>
-        <div className="flex gap-2 text-xs">
-          {Object.entries(statusCounts).map(([status, count]) => (
-            <button
-              key={status}
-              onClick={() => setFilter(filter === status ? "all" : status)}
-              className={`rounded px-2 py-1 font-medium ${
-                filter === status
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-              }`}
-            >
-              {status}: {count}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {loading ? (
-        <p className="mt-4 text-center text-xs text-zinc-400">Загрузка очереди трендов...</p>
-      ) : filteredTrends.length === 0 ? (
-        <p className="mt-4 text-center text-xs text-zinc-500">
-          {filter === "all" ? "Очередь пуста" : `Нет элементов со статусом "${filter}"`}
-        </p>
-      ) : (
-        <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50/90">
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Статус</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Балл</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Причина</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Платформа</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Заголовок</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Автор</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Просмотры</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Опубликован</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Выход в тренды</th>
-                  <th className="px-2 py-2 text-left font-semibold text-zinc-600">Обнаружен</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTrends.map(trend => (
-                  <tr key={trend.id} className="border-b border-zinc-100">
-                    <td className="px-2 py-2">
-                      <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
-                        trend.status === "queued" ? "bg-yellow-100 text-yellow-800" :
-                        trend.status === "published" ? "bg-green-100 text-green-800" :
-                        trend.status === "archived" ? "bg-gray-100 text-gray-800" :
-                        "bg-red-100 text-red-800"
-                      }`}>
-                        {trend.status}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2 font-medium">{trend.trendScore}</td>
-                    <td className="px-2 py-2 max-w-[120px] truncate" title={trend.reason || ""}>
-                      {trend.reason || "—"}
-                    </td>
-                    <td className="px-2 py-2">
-                      <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
-                        trend.video.platform === "youtube" ? "bg-red-100 text-red-700" :
-                        "bg-purple-100 text-purple-700"
-                      }`}>
-                        {trend.video.platform}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2 max-w-[200px] truncate font-medium" title={trend.video.title}>
-                      {trend.video.title}
-                    </td>
-                    <td className="px-2 py-2 max-w-[100px] truncate">
-                      {trend.video.authorUsername || "—"}
-                    </td>
-                    <td className="px-2 py-2">{trend.video.views.toLocaleString("ru-RU")}</td>
-                    <td className="px-2 py-2">{formatDt(trend.video.publishedAt)}</td>
-                    <td className="px-2 py-2">
-                      {trend.publishedAt ? formatDt(trend.publishedAt) : 
-                       trend.releaseAt ? formatDt(trend.releaseAt) : "—"}
-                    </td>
-                    <td className="px-2 py-2">{formatDt(trend.detectedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
 
 export function AdminVideosApp() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-zinc-50 text-sm text-zinc-500">
-          Загрузка админки…
+        <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500">
+          Загрузка…
         </div>
       }
     >

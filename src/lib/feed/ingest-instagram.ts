@@ -79,6 +79,7 @@ export async function upsertInstagramReelsFromTikHub(
   const now = new Date();
   let n = 0;
   for (const reel of reels) {
+    if (!reel.thumbnailUrl?.trim()) continue;
     const rating = computeUniversalVideoRating({
       views: reel.views,
       likes: reel.likes,

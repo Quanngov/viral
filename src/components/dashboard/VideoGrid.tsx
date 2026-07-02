@@ -1,6 +1,7 @@
 "use client";
 
 import type { GridVideo } from "@/lib/mock-data";
+import { isDisplayableHomeCard } from "@/lib/grid-video-display";
 import { VideoCard } from "./VideoCard";
 
 type VideoGridProps = {
@@ -14,11 +15,15 @@ type VideoGridProps = {
 const PRIORITY_ABOVE_FOLD = 8;
 
 export function VideoGrid({ videos, appendFrom = 0, onVideoClick, cardVariant = "compact" }: VideoGridProps) {
+  const items = videos
+    .map((video, sourceIndex) => ({ video, sourceIndex }))
+    .filter(({ video }) => isDisplayableHomeCard(video));
+
   return (
     <section className="pb-8 pt-1">
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-        {videos.map((video, index) => {
-          const isAppended = index >= appendFrom;
+        {items.map(({ video, sourceIndex }, index) => {
+          const isAppended = sourceIndex >= appendFrom;
           const delay = isAppended ? Math.min(index - appendFrom, 8) * 40 : 0;
 
           return (

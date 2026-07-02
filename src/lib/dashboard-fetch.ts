@@ -2,7 +2,7 @@ import { cachedFetch, invalidateCached, peekCached, seedCached } from "@/lib/cli
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import { HOME_SSR_LIMIT } from "@/lib/dashboard-initial";
 import type { GridVideo } from "@/lib/mock-data";
-import { filterDisplayableVideos } from "@/lib/grid-video-display";
+import { filterAndResolveDisplayableVideos } from "@/lib/grid-video-display";
 
 /** Persisted home grid (12–24 cards) — survives reload. */
 export const HOME_GRID_CACHE_KEY = "api:videos:home:grid";
@@ -115,11 +115,11 @@ export function loadRealtimeTrends() {
 export function peekHomeGridCache(): HomePayload | null {
   const raw = peekCached<HomePayload>(HOME_GRID_CACHE_KEY, HOME_GRID_STALE_MS, true);
   if (!raw?.videos?.length) return null;
-  return { videos: filterDisplayableVideos(raw.videos), totalCount: raw.totalCount ?? null };
+  return { videos: filterAndResolveDisplayableVideos(raw.videos), totalCount: raw.totalCount ?? null };
 }
 
 export function persistHomeGridCache(videos: GridVideo[]): void {
-  const valid = filterDisplayableVideos(videos);
+  const valid = filterAndResolveDisplayableVideos(videos);
   if (valid.length === 0) return;
   seedCached(
     HOME_GRID_CACHE_KEY,
@@ -201,7 +201,7 @@ export function prefetchCompetitorsBase() {
 
 /** After SSR — persist trends; home grid only if no richer cache yet. */
 export function seedDashboardFromSsr(initial: DashboardInitialPayload): void {
-  const ssrVideos = filterDisplayableVideos(initial.homeVideos);
+  const ssrVideos = filterAndResolveDisplayableVideos(initial.homeVideos);
   const existing = peekHomeGridCache();
   if (!existing?.videos?.length || ssrVideos.length > existing.videos.length) {
     persistHomeGridCache(ssrVideos);

@@ -116,6 +116,7 @@ async function ingestYouTubeShortsForQueryInner(opts: {
   for (let i = 0; i < pool.length; i++) {
     const d = pool[i];
     const p = d.parsed;
+    if (!p.thumbnailUrl?.trim()) continue;
     const normScore = normScores[i] ?? 1;
     const rating = computeUniversalVideoRating({
       views: p.views,

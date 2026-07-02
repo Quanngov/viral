@@ -2,6 +2,7 @@ import type { Video } from "@prisma/client";
 import type { VideoHomeCardRow, VideoTrendPreviewRow } from "@/lib/prisma-video-select";
 import { videoClientId } from "@/lib/video-client-id";
 import { formatAgeCompactRu, formatRelativeRu, formatViewsCount } from "@/lib/format-video";
+import { resolveThumbnailUrl } from "@/lib/video-thumbnail";
 
 function viralLabelFromRating(rating: number): "High Viral" | "Rising" | "Stable" {
   if (rating >= 85) return "High Viral";
@@ -13,9 +14,7 @@ function viralLabelFromRating(rating: number): "High Viral" | "Rising" | "Stable
 export function videoToClientJson(v: Video) {
   const id = videoClientId(v.platform, v.externalId);
   const ratingVal = Math.min(99, Math.max(0, v.rating > 0 ? v.rating : v.score));
-  const thumb =
-    v.thumbnailUrl?.trim() ||
-    (v.platform === "youtube" ? `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg` : "");
+  const thumb = resolveThumbnailUrl(v.platform, v.externalId, v.thumbnailUrl);
   const channel = v.channelTitle ?? v.authorDisplayName ?? v.authorUsername ?? "—";
   return {
     id,
@@ -58,9 +57,7 @@ export function videoToClientJson(v: Video) {
 export function videoToHomeCardJson(v: VideoHomeCardRow) {
   const id = videoClientId(v.platform, v.externalId);
   const ratingVal = Math.min(99, Math.max(0, v.rating > 0 ? v.rating : v.score));
-  const thumb =
-    v.thumbnailUrl?.trim() ||
-    (v.platform === "youtube" ? `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg` : "");
+  const thumb = resolveThumbnailUrl(v.platform, v.externalId, v.thumbnailUrl);
   const channel = v.channelTitle ?? v.authorDisplayName ?? v.authorUsername ?? "—";
   return {
     id,
@@ -88,9 +85,7 @@ export function videoToHomeCardJson(v: VideoHomeCardRow) {
 /** Компактная запись для левой колонки «тренды». */
 export function videoToTrendingJson(v: VideoTrendPreviewRow) {
   const id = videoClientId(v.platform, v.externalId);
-  const thumb =
-    v.thumbnailUrl?.trim() ||
-    (v.platform === "youtube" ? `https://i.ytimg.com/vi/${v.externalId}/hqdefault.jpg` : "");
+  const thumb = resolveThumbnailUrl(v.platform, v.externalId, v.thumbnailUrl);
   return {
     id,
     platform: v.platform,

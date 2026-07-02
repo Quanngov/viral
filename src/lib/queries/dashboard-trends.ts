@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { videoTrendPreviewSelect } from "@/lib/prisma-video-select";
 import { videoToTrendingJson } from "@/lib/serialize-video";
 import type { TrendsPayload } from "@/lib/dashboard-fetch";
+import { isDisplayableTrendVideo, withResolvedTrendThumbnail } from "@/lib/grid-video-display";
+import { DISPLAYABLE_THUMBNAIL_VIDEO_WHERE } from "@/lib/thumbnail-pipeline";
 
 type TrendRow = {
   id: string;
@@ -14,9 +16,10 @@ type TrendRow = {
 };
 
 function serializeTrendItem(item: TrendRow) {
+  const video = withResolvedTrendThumbnail(videoToTrendingJson(item.video));
   return {
     id: item.id,
-    video: videoToTrendingJson(item.video),
+    video,
     trendScore: item.trendScore,
     reason: item.reason,
     source: item.source,
@@ -31,6 +34,7 @@ async function publishDueQueuedTrendItems(now: Date) {
     where: {
       status: "queued",
       releaseAt: { lte: now },
+      video: DISPLAYABLE_THUMBNAIL_VIDEO_WHERE,
     },
     select: {
       id: true,
@@ -42,12 +46,15 @@ async function publishDueQueuedTrendItems(now: Date) {
       video: { select: videoTrendPreviewSelect },
     },
     orderBy: [{ releaseAt: "asc" }, { trendScore: "desc" }],
-    take: 1,
+    take: 20,
   });
 
   const newItems = [];
 
   for (const item of queuedItems) {
+    const serialized = serializeTrendItem(item);
+    if (!isDisplayableTrendVideo(serialized.video)) continue;
+
     await prisma.trendItem.update({
       where: { id: item.id },
       data: {
@@ -56,12 +63,8 @@ async function publishDueQueuedTrendItems(now: Date) {
       },
     });
 
-    newItems.push(
-      serializeTrendItem({
-        ...item,
-        publishedAt: now,
-      }),
-    );
+    newItems.push({ ...serialized, publishedAt: now.toISOString() });
+    break;
   }
 
   return newItems;
@@ -71,8 +74,12 @@ export async function queryRealtimeTrendsPayload(limit: number): Promise<TrendsP
   const now = new Date();
   const newItems = await publishDueQueuedTrendItems(now);
 
+  const oversample = Math.min(60, Math.max(limit * 5, limit + 20));
   const publishedItems = await prisma.trendItem.findMany({
-    where: { status: "published" },
+    where: {
+      status: "published",
+      video: DISPLAYABLE_THUMBNAIL_VIDEO_WHERE,
+    },
     select: {
       id: true,
       trendScore: true,
@@ -83,10 +90,16 @@ export async function queryRealtimeTrendsPayload(limit: number): Promise<TrendsP
       video: { select: videoTrendPreviewSelect },
     },
     orderBy: [{ publishedAt: "desc" }, { trendScore: "desc" }],
-    take: limit,
+    take: oversample,
   });
 
-  const trends = publishedItems.map((item) => serializeTrendItem(item));
+  const trends = [];
+  for (const item of publishedItems) {
+    const row = serializeTrendItem(item);
+    if (!isDisplayableTrendVideo(row.video)) continue;
+    trends.push(row);
+    if (trends.length >= limit) break;
+  }
 
   return { trends, newItems };
 }

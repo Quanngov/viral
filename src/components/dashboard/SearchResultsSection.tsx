@@ -18,7 +18,7 @@ import {
   peekHomeGridCache,
   publishTokenBalance,
 } from "@/lib/dashboard-fetch";
-import { filterDisplayableVideos } from "@/lib/grid-video-display";
+import { filterAndResolveDisplayableVideos } from "@/lib/grid-video-display";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 import { useToast } from "@/components/dashboard/ToastContext";
 import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
@@ -39,7 +39,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
   const { showToast } = useToast();
   const { hydrateForVideos, lastError, clearError } = useSavedVideos();
   const ssrVideos = useMemo(
-    () => filterDisplayableVideos(initialHome.homeVideos),
+    () => filterAndResolveDisplayableVideos(initialHome.homeVideos),
     [initialHome.homeVideos],
   );
   const [sourceVideos, setSourceVideos] = useState<GridVideo[]>(ssrVideos);
@@ -111,7 +111,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
         try {
           const { videos } = await fetchHomeVideos(HOME_SSR_LIMIT);
           if (!alive) return;
-          const valid = filterDisplayableVideos(videos);
+          const valid = filterAndResolveDisplayableVideos(videos);
           if (valid.length > 0) {
             persistHomeGridCache(valid);
             setSourceVideos(valid);

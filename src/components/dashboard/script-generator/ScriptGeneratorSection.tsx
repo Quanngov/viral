@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowUp, ChevronDown, Copy, ExternalLink, Loader2, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
 import { ScriptAssistantMarkdown } from "@/components/dashboard/script-generator/ScriptAssistantMarkdown";
 import { DashboardModal } from "@/components/dashboard/DashboardModal";
 import { formatViewsCount } from "@/lib/format-video";
@@ -54,6 +55,7 @@ type ApiProfile = {
 type SavedRow = {
   id: string;
   platform: string;
+  externalId: string;
   title: string;
   thumbnailUrl: string | null;
   authorDisplayName: string | null;
@@ -101,12 +103,16 @@ function ScriptReferenceCard({
     <div className="script-msg-enter group/reference w-full max-w-[95%] self-start rounded-2xl border border-emerald-100/90 bg-gradient-to-br from-white to-emerald-50/35 p-3 shadow-sm ring-1 ring-zinc-100">
       <div className="flex gap-3">
         <div className="relative h-[4.5rem] w-[4rem] shrink-0 overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200/80">
-          {item.thumbnailUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-[10px] text-zinc-400">Нет превью</div>
-          )}
+          <VideoThumbnail
+            platform={item.platform}
+            externalId={item.externalId}
+            thumbnailUrl={item.thumbnailUrl}
+            alt=""
+            fill
+            className="h-full w-full"
+            imageClassName="object-cover"
+            native
+          />
           <span className="pointer-events-none absolute -bottom-0.5 -left-0.5 z-10 drop-shadow">
             <PlatformIcon platform={pf} size={20} className="block" />
           </span>
@@ -991,10 +997,16 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
                   >
                     <div className="relative h-[5.25rem] w-[4.75rem] shrink-0 self-center overflow-visible">
                       <div className="relative h-full w-full overflow-hidden rounded-lg bg-zinc-100 ring-1 ring-zinc-200/80">
-                        {v.thumbnailUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={v.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-                        ) : null}
+                        <VideoThumbnail
+                          platform={v.platform}
+                          externalId={v.externalId}
+                          thumbnailUrl={v.thumbnailUrl}
+                          alt=""
+                          fill
+                          className="h-full w-full"
+                          imageClassName="object-cover"
+                          native
+                        />
                       </div>
                       <span className="pointer-events-none absolute -bottom-1 -left-1 z-10 drop-shadow-md">
                         <PlatformIcon platform={platformUi(v.platform)} size={22} className="block" />

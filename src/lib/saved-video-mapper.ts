@@ -2,6 +2,7 @@ import type { SavedVideo } from "@prisma/client";
 import type { GridVideo } from "@/lib/mock-data";
 import { formatAgeCompactRu, formatRelativeRu, formatViewsCount } from "@/lib/format-video";
 import { parseVideoClientId, videoClientId } from "@/lib/video-client-id";
+import { resolveThumbnailUrl } from "@/lib/video-thumbnail";
 
 function parsePublishedAt(raw: unknown): Date | null {
   if (raw == null) return null;
@@ -109,9 +110,7 @@ export function savedVideoToGridVideo(row: SavedVideo): GridVideo {
   const comments = row.comments ?? 0;
   const published = parsePublishedAt(row.publishedAt);
   const ratingVal = row.rating ?? 0;
-  const thumb =
-    row.thumbnailUrl?.trim() ||
-    (row.platform === "youtube" ? `https://i.ytimg.com/vi/${row.externalId}/hqdefault.jpg` : "");
+  const thumb = resolveThumbnailUrl(row.platform, row.externalId, row.thumbnailUrl, id);
 
   const platformUi: NonNullable<GridVideo["platform"]> =
     row.platform === "youtube" ? "youtube" : row.platform === "tiktok" ? "tiktok" : "instagram";

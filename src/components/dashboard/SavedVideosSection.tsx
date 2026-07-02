@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { SavedVideo } from "@prisma/client";
 import type { GridVideo } from "@/lib/mock-data";
 import { savedVideoToGridVideo } from "@/lib/saved-video-mapper";
+import { filterAndResolveDisplayableVideos } from "@/lib/grid-video-display";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
 import { VideoGridSkeleton } from "@/components/dashboard/DashboardSkeletons";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
@@ -56,7 +57,7 @@ export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectio
 
   const gridVideos = useMemo(() => {
     const seen = new Set<string>();
-    return rows
+    const mapped = rows
       .map((r) => savedVideoToGridVideo(r))
       .filter((v) => !isOptimisticallyRemovedFromSavedList(v.id))
       .filter((v) => {
@@ -64,6 +65,7 @@ export function SavedVideosSection({ isActive, onVideoClick }: SavedVideosSectio
         seen.add(v.id);
         return true;
       });
+    return filterAndResolveDisplayableVideos(mapped);
   }, [rows, isOptimisticallyRemovedFromSavedList]);
 
   const showSkeleton = loading && gridVideos.length === 0;

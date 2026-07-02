@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GridVideo } from "@/lib/mock-data";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import { loadRealtimeTrends, peekTrendsCache, persistTrendsCache } from "@/lib/dashboard-fetch";
 import { mapTrendsPayload, type LiveTrendVideo } from "@/lib/trends-display";
+import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
 import {
   MobileTrendCardSkeleton,
   TrendRowSkeletonList,
@@ -220,18 +220,16 @@ function MobileTrendCard({
         className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white text-left shadow-sm shadow-zinc-900/5"
       >
         <div className="relative aspect-[4/5] w-full bg-zinc-100">
-          {video.thumbnailUrl ? (
-            <Image
-              src={video.thumbnailUrl}
-              alt=""
-              fill
-              sizes="260px"
-              className="object-cover"
-              priority={priority}
-              loading={priority ? undefined : "lazy"}
-              decoding="async"
-            />
-          ) : null}
+          <VideoThumbnail
+            clientId={video.id}
+            thumbnailUrl={video.thumbnailUrl}
+            alt=""
+            fill
+            sizes="260px"
+            className="h-full w-full"
+            imageClassName="object-cover"
+            priority={priority}
+          />
         </div>
         <div className="flex flex-1 flex-col gap-1 p-2.5">
           <h3 className="line-clamp-2 text-xs font-semibold leading-snug text-zinc-900">{video.title}</h3>

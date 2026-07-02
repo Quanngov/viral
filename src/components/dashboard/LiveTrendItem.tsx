@@ -1,5 +1,5 @@
-import Image from "next/image";
 import type { LiveTrendVideo } from "@/lib/mock-data";
+import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
 
 type LiveTrendItemProps = {
   video: LiveTrendVideo;
@@ -14,14 +14,14 @@ export function LiveTrendItem({ video, onClick }: LiveTrendItemProps) {
       className="group flex w-full gap-2 rounded-xl border border-transparent bg-white p-2 text-left shadow-sm shadow-zinc-900/5 transition-all duration-200 hover:border-emerald-200/80 hover:shadow-md hover:shadow-zinc-900/10"
     >
       <div className="relative h-14 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-100 ring-1 ring-zinc-900/5">
-        <Image
-          src={video.thumbnailUrl}
+        <VideoThumbnail
+          clientId={video.id}
+          thumbnailUrl={video.thumbnailUrl}
           alt=""
           fill
           sizes="36px"
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-          loading="lazy"
-          decoding="async"
+          className="h-full w-full"
+          imageClassName="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-2">

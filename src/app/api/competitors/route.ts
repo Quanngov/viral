@@ -7,6 +7,7 @@ import { syncInstagramCompetitorReelsFromTikHub } from "@/lib/competitor-instagr
 import { assertCompetitorAddAllowed } from "@/lib/billing/billing-service";
 import { getActionTokenCost } from "@/lib/billing/billing.config";
 import { ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
+import { hasResolvableThumbnail } from "@/lib/video-thumbnail";
 import { parseDurationToSeconds } from "@/lib/youtube";
 
 export const dynamic = "force-dynamic";
@@ -454,6 +455,10 @@ export async function POST(req: Request) {
       );
 
       for (const video of shorts) {
+        if (!video.thumbnailUrl?.trim() && video.externalId) {
+          video.thumbnailUrl = `https://i.ytimg.com/vi/${video.externalId}/hqdefault.jpg`;
+        }
+        if (!hasResolvableThumbnail("youtube", video.externalId, video.thumbnailUrl)) continue;
         const existed = existingIds.has(video.externalId);
         await prisma.competitorVideo.upsert({
           where: {

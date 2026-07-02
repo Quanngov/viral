@@ -3,6 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { withApiRoute } from "@/lib/api-route";
 import { prisma } from "@/lib/prisma";
 import { ensureSessionUser } from "@/lib/token-wallet";
+import { fillDisplayableFromPool } from "@/lib/grid-video-display";
+import { hasResolvableThumbnail } from "@/lib/video-thumbnail";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,7 @@ export const GET = withApiRoute("competitors.videos.GET", async (req) => {
           ? [{ competitor: { displayName: sortOrder } }]
           : [{ publishedAt: "desc" }];
 
+  const oversample = Math.min(500, Math.max(limit * 4, limit + 40));
   const rows = await prisma.competitorVideo.findMany({
     where: { competitor: { userId } },
     include: {
@@ -38,8 +41,12 @@ export const GET = withApiRoute("competitors.videos.GET", async (req) => {
       },
     },
     orderBy,
-    take: limit,
+    take: oversample,
   });
 
-  return NextResponse.json({ videos: rows });
+  const videos = fillDisplayableFromPool(rows, limit, (v) =>
+    hasResolvableThumbnail(v.platform, v.externalId, v.thumbnailUrl),
+  );
+
+  return NextResponse.json({ videos });
 });

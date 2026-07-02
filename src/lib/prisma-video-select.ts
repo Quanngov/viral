@@ -1,20 +1,10 @@
 import type { Prisma } from "@prisma/client";
+import { DISPLAYABLE_THUMBNAIL_VIDEO_WHERE } from "@/lib/thumbnail-pipeline";
 
 export const HOME_VIDEO_WHERE: Prisma.VideoWhereInput = {
   durationSeconds: { lte: 60 },
   views: { gte: 500 },
-  NOT: { thumbnailStatus: "invalid" },
-  OR: [
-    { platform: "youtube" },
-    {
-      AND: [
-        { platform: "instagram" },
-        { thumbnailUrl: { not: null } },
-        { NOT: { thumbnailUrl: "" } },
-        { thumbnailFailCount: { lt: 3 } },
-      ],
-    },
-  ],
+  AND: [DISPLAYABLE_THUMBNAIL_VIDEO_WHERE],
 };
 
 /** Home grid — no transcript / blobs / heavy metrics. */

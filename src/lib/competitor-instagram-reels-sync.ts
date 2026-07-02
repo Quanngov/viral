@@ -22,6 +22,7 @@ async function upsertCompetitorVideoFromInstagramReel(
   competitorId: string,
   reel: NormalizedInstagramReel,
 ): Promise<void> {
+  if (!reel.thumbnailUrl?.trim()) return;
   const now = new Date();
   const rating = computeUniversalVideoRating({
     views: reel.views,

@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import type { GridVideo } from "@/lib/mock-data";
 import {
   type CompetitorAccount,
@@ -10,11 +10,13 @@ import {
 import { detectCompetitorPlatform } from "@/lib/competitor-input";
 import { videoClientId } from "@/lib/video-client-id";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
+import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
 import { useToast } from "@/components/dashboard/ToastContext";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 import { formatMetricCount } from "@/lib/format-metrics";
 import { SKELETON_CARD_CLASS } from "@/components/dashboard/DashboardSkeletons";
 import { USER_MSG } from "@/lib/api-user-messages";
+import { resolveThumbnailUrl } from "@/lib/video-thumbnail";
 import {
   fetchCompetitorsBase,
   peekCompetitorsBaseCache,
@@ -99,7 +101,7 @@ function adaptCompetitorVideoToGridVideo(
     rating: video.score,
     score: video.score,
     viralLabel: video.score >= 85 ? "High Viral" : video.score >= 65 ? "Rising" : "Stable",
-    thumbnailUrl: video.thumbnailUrl ?? "https://picsum.photos/seed/competitor-fallback/540/720",
+    thumbnailUrl: resolveThumbnailUrl(plat, ext, video.thumbnailUrl, id),
     url: video.url,
     videoUrl: video.videoUrl ?? null,
     comments: video.comments,
@@ -692,12 +694,15 @@ export function CompetitorSpySection({ onVideoClick, active = true }: Competitor
                     onClick={() => onVideoClick?.(adaptCompetitorVideoToGridVideo(video, account))}
                   >
                     <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl bg-white shadow-sm shadow-zinc-900/5">
-                      <Image
-                        src={video.thumbnailUrl}
+                      <VideoThumbnail
+                        platform={video.platform ?? undefined}
+                        externalId={video.externalId}
+                        thumbnailUrl={video.thumbnailUrl}
                         alt=""
                         fill
                         sizes="(min-width: 1280px) 22vw, (min-width: 768px) 33vw, 100vw"
-                        className="h-full w-full object-cover object-center"
+                        className="h-full w-full"
+                        imageClassName="h-full w-full object-cover object-center"
                       />
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
                       <span className="pointer-events-none absolute left-2.5 top-2.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]">
@@ -911,15 +916,16 @@ export function CompetitorSpySection({ onVideoClick, active = true }: Competitor
                       </td>
                       <td className="px-2 py-3">
                         <div className="relative h-12 w-9 overflow-hidden rounded-md bg-zinc-100 ring-1 ring-zinc-200">
-                          {video.thumbnailUrl ? (
-                            <Image
-                              src={video.thumbnailUrl}
-                              alt=""
-                              fill
-                              sizes="36px"
-                              className="h-full w-full object-cover object-center"
-                            />
-                          ) : null}
+                          <VideoThumbnail
+                            platform={video.platform ?? undefined}
+                            externalId={video.externalId}
+                            thumbnailUrl={video.thumbnailUrl}
+                            alt=""
+                            fill
+                            sizes="36px"
+                            className="h-full w-full"
+                            imageClassName="h-full w-full object-cover object-center"
+                          />
                         </div>
                       </td>
                       <td className="px-4 py-3">
