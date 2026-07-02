@@ -7,5 +7,5 @@ export type DashboardInitialPayload = {
   trends: TrendsPayload;
 };
 
-export const HOME_SSR_LIMIT = 12;
+export const HOME_SSR_LIMIT = 8;
 export const TRENDS_SSR_LIMIT = 10;

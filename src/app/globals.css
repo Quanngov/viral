@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Explicit scan roots: only app source, never tooling sockets under .codegraph */
+@source "../**/*.{js,ts,jsx,tsx,mdx}";
+@source not "../../.codegraph";
+@source not "../../node_modules";
+@source not "../../.next";
+
 :root {
   --background: #f4f5f7;
   --foreground: #18181b;

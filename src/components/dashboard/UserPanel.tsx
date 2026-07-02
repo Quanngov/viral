@@ -156,6 +156,18 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
     void refreshBalance();
   }, [showAuthed, sessionLoading, displayEmail, refreshBalance]);
 
+  useEffect(() => {
+    const onTokensUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ balance?: number }>).detail;
+      if (typeof detail?.balance === "number") {
+        setBalance(detail.balance);
+        setBalanceLoaded(true);
+      }
+    };
+    window.addEventListener("viral:tokens-updated", onTokensUpdated);
+    return () => window.removeEventListener("viral:tokens-updated", onTokensUpdated);
+  }, []);
+
   const onAuthSuccess = useCallback(() => {
     void refreshBalance();
   }, [refreshBalance]);

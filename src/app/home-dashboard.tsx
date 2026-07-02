@@ -17,14 +17,10 @@ import { WeeklyTrendsSection } from "@/components/dashboard/WeeklyTrendsSection"
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import type { GridVideo } from "@/lib/mock-data";
 import { mockWeeklyTrends } from "@/lib/mock-data";
-import { loadSavedMap, loadSavedVideosList, seedDashboardFromSsr } from "@/lib/dashboard-fetch";
+import { seedDashboardFromSsr } from "@/lib/dashboard-fetch";
 import { readViewFromLocation, replaceDashboardTabUrl } from "@/lib/dashboard-tab-url";
 
 const VALID_TABS = new Set(["home", "competitors", "saved", "search", "scripts"]);
-
-/** Stagger non-critical API work to protect Supabase pool (free tier). */
-const SAVED_MAP_MS = 12_000;
-const SAVED_LIST_MS = 18_000;
 
 function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
   const [activeView, setActiveViewState] = useState<DashboardView>("home");
@@ -56,15 +52,6 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
   useEffect(() => {
     seedDashboardFromSsr(initial);
   }, [initial]);
-
-  useEffect(() => {
-    const t1 = window.setTimeout(() => void loadSavedMap(), SAVED_MAP_MS);
-    const t2 = window.setTimeout(() => void loadSavedVideosList(), SAVED_LIST_MS);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, []);
 
   return (
     <AuthSessionProvider>

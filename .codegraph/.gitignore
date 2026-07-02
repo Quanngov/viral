@@ -14,3 +14,7 @@ cache/
 
 # Hook markers
 .dirty
+
+# Runtime IPC (Unix socket — must not be traversed by bundlers)
+daemon.sock
+daemon.pid

@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { srtOrVttToPlainText } from "@/lib/subtitle-parse";
 import { getGroqWhisperModel, getTranscriptionTokenCost } from "@/lib/transcription-config";
 import { USER_MSG } from "@/lib/api-user-messages";
-import { creditTokens, ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
+import { ensureSessionUser, creditTokens, spendTokens } from "@/lib/token-wallet";
 import { refreshInstagramVideoFromTikHubForTranscription } from "@/lib/instagram-transcribe-refresh";
 import { resolveVideoForTranscription, type ResolveVideoForTranscriptionInput } from "@/lib/resolve-video-for-transcription";
 import { listTranscriptionSubtitleUris, resolvePlayableVideoUrl, extractInstagramReelCodeFromVideo } from "@/lib/video-transcription-resolve";
@@ -23,6 +23,10 @@ const YT_NO_AUDIO_MSG = "Для YouTube-ролика пока нет распо�
 
 const INSTAGRAM_NO_VIDEO_MSG =
   "Не удалось получить видеофайл для этого ролика. Попробуйте найти ролик заново через поиск.";
+
+const TRANSCRIPTION_SPEND_REASON = "video_transcription";
+const TRANSCRIPTION_REFUND_FAILED = "video_transcription_refund_failed";
+const TRANSCRIPTION_REFUND_UNAVAILABLE = "video_transcription_refund_unavailable";
 
 function urlHost(u: string): string {
   try {
@@ -177,13 +181,20 @@ export async function POST(req: Request) {
   const hasReadyTranscript =
     Boolean(v.transcriptText?.trim()) && v.transcriptStatus !== "processing" && v.transcriptStatus !== "failed";
   if (hasReadyTranscript && !force) {
+    const spend = await spendTokens(userId, cost, TRANSCRIPTION_SPEND_REASON, { sessionId: sessionKey });
+    if (!spend.ok) {
+      return NextResponse.json(
+        { error: "insufficient_tokens", message: "Недостаточно токенов.", balance: spend.balance },
+        { status: 402 },
+      );
+    }
     await logAdminEvent({
       level: "info",
       type: "transcript_cache_hit",
       message: "Транскрипт из кэша",
       sessionId: sessionKey,
       userId,
-      meta: safeMeta({ videoId: cid, transcriptSource: v.transcriptSource }),
+      meta: safeMeta({ videoId: cid, transcriptSource: v.transcriptSource, cost }),
     });
     return NextResponse.json({
       videoId: cid,
@@ -194,7 +205,7 @@ export async function POST(req: Request) {
       transcriptCreatedAt: v.transcriptCreatedAt?.toISOString() ?? null,
       segments: extractSegmentsFromJson(v.transcriptJson),
       cached: true,
-      balance: await getTokenBalanceForUser(userId),
+      balance: spend.balance,
     });
   }
 
@@ -211,6 +222,50 @@ export async function POST(req: Request) {
       );
     }
   }
+
+  const preRefreshSubtitleUris = listTranscriptionSubtitleUris(v);
+  const preRefreshPlayableUrl = resolvePlayableVideoUrl(v);
+  if (v.platform === "youtube" && preRefreshSubtitleUris.length === 0 && !preRefreshPlayableUrl) {
+    await logAdminEvent({
+      level: "info",
+      type: "transcript_failed",
+      message: "YouTube: нет субтитров и прямого аудио",
+      sessionId: sessionKey,
+      userId,
+      meta: safeMeta({ videoId: cid, reason: "youtube_no_direct_audio" }),
+    });
+    return NextResponse.json(
+      {
+        error: "unavailable",
+        code: "youtube_no_audio",
+        message: YT_NO_AUDIO_MSG,
+      },
+      { status: 422 },
+    );
+  }
+
+  const spend = await spendTokens(userId, cost, TRANSCRIPTION_SPEND_REASON, { sessionId: sessionKey });
+  if (!spend.ok) {
+    await logAdminEvent({
+      level: "warn",
+      type: "transcript_failed",
+      message: "Недостаточно токенов для транскрибации",
+      sessionId: sessionKey,
+      userId,
+      meta: safeMeta({ videoId: cid, cost, balance: spend.balance }),
+    });
+    return NextResponse.json(
+      { error: "insufficient_tokens", message: "Недостаточно токенов.", balance: spend.balance },
+      { status: 402 },
+    );
+  }
+
+  let balanceAfterSpend = spend.balance;
+
+  const refundSpend = async (reason: string) => {
+    const refunded = await creditTokens(userId, cost, reason, { sessionId: sessionKey, source: cid });
+    balanceAfterSpend = refunded.balance;
+  };
 
   if (v.platform === "instagram") {
     const subsBefore = listTranscriptionSubtitleUris(v);
@@ -229,6 +284,7 @@ export async function POST(req: Request) {
   const isYoutube = v.platform === "youtube";
 
   if (isYoutube && subtitleUris.length === 0 && !playableUrl) {
+    await refundSpend(TRANSCRIPTION_REFUND_UNAVAILABLE);
     await logAdminEvent({
       level: "info",
       type: "transcript_failed",
@@ -251,6 +307,7 @@ export async function POST(req: Request) {
   const canTryGroq = Boolean(playableUrl) && Boolean(groqKey);
 
   if (!canTrySubtitles && !canTryGroq) {
+    await refundSpend(TRANSCRIPTION_REFUND_UNAVAILABLE);
     const message = !groqKey
       ? USER_MSG.groqKeyMissing
       : v.platform === "instagram"
@@ -278,22 +335,6 @@ export async function POST(req: Request) {
     );
   }
 
-  const spend = await spendTokens(userId, cost, "video_transcription", { sessionId: sessionKey });
-  if (!spend.ok) {
-    await logAdminEvent({
-      level: "warn",
-      type: "transcript_failed",
-      message: "Недостаточно токенов для транскрибации",
-      sessionId: sessionKey,
-      userId,
-      meta: safeMeta({ videoId: cid, cost, balance: spend.balance }),
-    });
-    return NextResponse.json(
-      { error: "insufficient_tokens", message: "Недостаточно токенов.", balance: spend.balance },
-      { status: 402 },
-    );
-  }
-
   await prisma.video.update({
     where: { id: v.id },
     data: { transcriptStatus: "processing", transcriptText: null },
@@ -315,11 +356,11 @@ export async function POST(req: Request) {
   });
 
   const fail = async (msg: string, meta: Record<string, unknown>) => {
-    await creditTokens(userId, cost, "video_transcription_refund", { sessionId: sessionKey });
     await prisma.video.update({
       where: { id: v.id },
       data: { transcriptStatus: "failed" },
     });
+    await refundSpend(TRANSCRIPTION_REFUND_FAILED);
     await logAdminEvent({
       level: "warn",
       type: "transcript_failed",
@@ -363,7 +404,6 @@ export async function POST(req: Request) {
           subtitleHost: sub.uriHost,
         }),
       });
-      const balance = await getTokenBalanceForUser(userId);
       return NextResponse.json({
         videoId: cid,
         transcriptText: sub.text,
@@ -372,7 +412,7 @@ export async function POST(req: Request) {
         transcriptLanguage: v.language?.trim() || null,
         transcriptCreatedAt: new Date().toISOString(),
         segments: [],
-        balance,
+        balance: balanceAfterSpend,
       });
     }
 
@@ -438,7 +478,6 @@ export async function POST(req: Request) {
       }),
     });
 
-    const balance = await getTokenBalanceForUser(userId);
     return NextResponse.json({
       videoId: cid,
       transcriptText: text,
@@ -447,7 +486,7 @@ export async function POST(req: Request) {
       transcriptLanguage: groqOut.language ?? v.language?.trim() ?? null,
       transcriptCreatedAt: new Date().toISOString(),
       segments: groqOut.segments.slice(0, 80),
-      balance,
+      balance: balanceAfterSpend,
     });
   } catch (e) {
     const errMsg = e instanceof Error ? e.message.slice(0, 300) : String(e).slice(0, 300);

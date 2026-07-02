@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { AdminEventsConsole } from "@/components/admin/AdminEventsConsole";
+import { AdminBillingPanel } from "@/components/admin/AdminBillingPanel";
 
 export type AdminVideoRow = {
   id: string;
@@ -290,6 +291,8 @@ function AdminVideosInner() {
             </ul>
           </section>
         ) : null}
+
+        <AdminBillingPanel appendKey={appendKey} />
 
         <TrendsQueueSection />
 

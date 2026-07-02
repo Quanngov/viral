@@ -58,7 +58,9 @@ Open **`project-docs/dashboard.html`** directly in a browser (no server):
 file:///.../viral/project-docs/dashboard.html
 ```
 
-Markdown files are the source of truth. After editing them, regenerate the dashboard:
+Unified ops panel: project docs + pricing (`pricing/*.md`). Sections: Overview, Business, Architecture, AI, History, Problems, ChatGPT export. Brief / Detailed modes.
+
+Regenerate after editing any markdown:
 
 ```bash
 node project-docs/build-dashboard.mjs

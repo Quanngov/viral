@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { syncInstagramCompetitorReelsFromTikHub } from "@/lib/competitor-instagram-reels-sync";
+import { getActionTokenCost } from "@/lib/billing/billing.config";
 import { logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { prisma } from "@/lib/prisma";
-import { ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
+import { ensureSessionUser, spendTokens } from "@/lib/token-wallet";
 
 export const dynamic = "force-dynamic";
 
-const INSTAGRAM_REFRESH_TOKEN_COST = 30;
+const REFRESH_COST = getActionTokenCost("REFRESH_COMPETITOR");
 
 type RouteCtx = { params: Promise<{ competitorId: string }> };
 
@@ -65,50 +66,20 @@ export async function POST(_req: Request, ctx: RouteCtx) {
     );
   }
 
-  const spend = await spendTokens(userId, INSTAGRAM_REFRESH_TOKEN_COST, "competitor_instagram_refresh_reels", {
+  const spend = await spendTokens(userId, REFRESH_COST, "competitor_instagram_refresh_reels", {
     sessionId: sessionKey,
   });
   if (!spend.ok) {
-    await logAdminEvent({
-      level: "warn",
-      type: "competitor_add_error",
-      message: "Недостаточно токенов для обновления Reels",
-      sessionId: sessionKey,
-      userId,
-      meta: safeMeta({
-        phase: "tokens",
-        required: INSTAGRAM_REFRESH_TOKEN_COST,
-        balance: spend.balance,
-        platform: "instagram",
-        action: "refresh",
-      }),
-    });
     return NextResponse.json(
       {
         ok: false,
         error: "insufficient_tokens",
-        tokensOk: false,
         tokensRemaining: spend.balance,
-        message: "Недостаточно внутренних токенов для обновления (нужно 30).",
+        message: `Недостаточно токенов (нужно ${REFRESH_COST}).`,
       },
       { status: 402 },
     );
   }
-
-  await logAdminEvent({
-    level: "info",
-    type: "competitor_token_spend",
-    message: "Списание токенов за обновление Reels Instagram-конкурента",
-    sessionId: sessionKey,
-    userId,
-    meta: safeMeta({
-      amount: INSTAGRAM_REFRESH_TOKEN_COST,
-      balanceAfter: spend.balance,
-      platform: "instagram",
-      username: competitor.externalId,
-      action: "refresh_reels",
-    }),
-  });
 
   const syncResult = await syncInstagramCompetitorReelsFromTikHub({
     competitorId: competitor.id,
@@ -117,25 +88,25 @@ export async function POST(_req: Request, ctx: RouteCtx) {
     sessionKey,
   });
 
-  const tokensRemaining = await getTokenBalanceForUser(userId);
-
-  let message: string;
-  if (syncResult.videosLoaded > 0) {
-    message = `Обновлено, загружено ${syncResult.videosLoaded} роликов`;
-  } else if (syncResult.reelsFetchFailed) {
-    message = "Ролики не загрузились. Попробуйте обновить позже.";
-  } else {
-    message = "Ролики пока не найдены";
-  }
-
-  const fresh = await prisma.competitorAccount.findUnique({ where: { id: competitor.id } });
+  await logAdminEvent({
+    level: "info",
+    type: "competitor_token_spend",
+    message: "Списание токенов за обновление Reels",
+    sessionId: sessionKey,
+    userId,
+    meta: safeMeta({
+      amount: REFRESH_COST,
+      balanceAfter: spend.balance,
+      competitorId: competitor.id,
+    }),
+  });
 
   return NextResponse.json({
     ok: true,
-    competitor: fresh ?? competitor,
-    videosSaved: syncResult.videosLoaded,
-    tokensRemaining,
-    message,
-    warning: syncResult.warnings.length ? [...new Set(syncResult.warnings)].join(" ") : undefined,
+    competitorId: competitor.id,
+    videosLoaded: syncResult.videosLoaded,
+    successfulPages: syncResult.successfulPages,
+    warnings: syncResult.warnings,
+    tokensRemaining: spend.balance,
   });
 }

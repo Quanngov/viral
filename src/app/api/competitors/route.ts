@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { withApiRoute } from "@/lib/api-route";
 import { detectCompetitorPlatform } from "@/lib/competitor-input";
-import { syncInstagramCompetitorReelsFromTikHub } from "@/lib/competitor-instagram-reels-sync";
-import { MAX_COMPETITORS_PER_USER } from "@/lib/competitor-daily-sync-config";
 import { logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { prisma } from "@/lib/prisma";
+import { syncInstagramCompetitorReelsFromTikHub } from "@/lib/competitor-instagram-reels-sync";
+import { assertCompetitorAddAllowed } from "@/lib/billing/billing-service";
+import { getActionTokenCost } from "@/lib/billing/billing.config";
 import { ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
 import { parseDurationToSeconds } from "@/lib/youtube";
 
 export const dynamic = "force-dynamic";
 const YT_BASE = "https://www.googleapis.com/youtube/v3";
 const MAX_COMPETITOR_VIDEO_DURATION_SECONDS = 60;
-const INSTAGRAM_COMPETITOR_TOKEN_COST = 30;
+const ADD_COMPETITOR_COST = getActionTokenCost("ADD_COMPETITOR");
 
 type YtChannelItem = {
   id?: string;
@@ -89,20 +90,18 @@ export async function POST(req: Request) {
     const externalId = username.toLowerCase();
     const { userId, sessionKey } = await ensureSessionUser();
 
-    const existingCount = await prisma.competitorAccount.count({ where: { userId } });
-    const alreadyMine = await prisma.competitorAccount.findFirst({
-      where: { userId, platform: "instagram", externalId },
+    const slot = await assertCompetitorAddAllowed({
+      userId,
+      platform: "instagram",
+      externalId,
     });
-    if (!alreadyMine && existingCount >= MAX_COMPETITORS_PER_USER) {
+    if (!slot.ok) {
       return NextResponse.json(
-        {
-          error: "limit_reached",
-          message:
-            "У вас уже добавлено 10 профилей. Чтобы добавить новый, удалите один из старых.",
-        },
-        { status: 409 },
+        { error: slot.error, message: slot.message },
+        { status: slot.status },
       );
     }
+    const alreadyMine = slot.alreadyMine;
 
     await logAdminEvent({
       level: "info",
@@ -132,48 +131,38 @@ export async function POST(req: Request) {
       );
     }
 
-    const spend = await spendTokens(userId, INSTAGRAM_COMPETITOR_TOKEN_COST, "competitor_instagram_add", {
-      sessionId: sessionKey,
-    });
-    if (!spend.ok) {
+    let tokensRemaining = await getTokenBalanceForUser(userId);
+    if (!alreadyMine) {
+      const spend = await spendTokens(userId, ADD_COMPETITOR_COST, "competitor_instagram_add", {
+        sessionId: sessionKey,
+      });
+      tokensRemaining = spend.balance;
+      if (!spend.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "insufficient_tokens",
+            tokensOk: false,
+            tokensRemaining: spend.balance,
+            message: `Недостаточно токенов для добавления конкурента (нужно ${ADD_COMPETITOR_COST}).`,
+          },
+          { status: 402 },
+        );
+      }
       await logAdminEvent({
-        level: "warn",
-        type: "competitor_add_error",
-        message: "Недостаточно токенов для добавления Instagram-конкурента",
+        level: "info",
+        type: "competitor_token_spend",
+        message: "Списание токенов за добавление Instagram-конкурента",
         sessionId: sessionKey,
         userId,
         meta: safeMeta({
-          phase: "tokens",
-          required: INSTAGRAM_COMPETITOR_TOKEN_COST,
-          balance: spend.balance,
+          amount: ADD_COMPETITOR_COST,
+          balanceAfter: spend.balance,
           platform: "instagram",
+          username: externalId,
         }),
       });
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "insufficient_tokens",
-          tokensOk: false,
-          tokensRemaining: spend.balance,
-          message: "Недостаточно внутренних токенов для добавления Instagram-конкурента (нужно 30).",
-        },
-        { status: 402 },
-      );
     }
-
-    await logAdminEvent({
-      level: "info",
-      type: "competitor_token_spend",
-      message: "Списание токенов за добавление Instagram-конкурента",
-      sessionId: sessionKey,
-      userId,
-      meta: safeMeta({
-        amount: INSTAGRAM_COMPETITOR_TOKEN_COST,
-        balanceAfter: spend.balance,
-        platform: "instagram",
-        username: externalId,
-      }),
-    });
 
     const competitor = await prisma.competitorAccount.upsert({
       where: {
@@ -210,8 +199,6 @@ export async function POST(req: Request) {
       userId,
       sessionKey,
     });
-
-    const tokensRemaining = await getTokenBalanceForUser(userId);
 
     let message: string;
     if (syncResult.videosLoaded > 0) {
@@ -312,19 +299,31 @@ export async function POST(req: Request) {
   const resolvedChannelId = channel.id;
   const { userId } = await ensureSessionUser();
 
-  const existingCount = await prisma.competitorAccount.count({ where: { userId } });
-  const alreadyMine = await prisma.competitorAccount.findFirst({
-    where: { userId, platform: "youtube", externalId: resolvedChannelId },
+  const slot = await assertCompetitorAddAllowed({
+    userId,
+    platform: "youtube",
+    externalId: resolvedChannelId,
   });
-  if (!alreadyMine && existingCount >= MAX_COMPETITORS_PER_USER) {
-    return NextResponse.json(
-      {
-        error: "limit_reached",
-        message:
-          "У вас уже добавлено 10 профилей. Чтобы добавить новый, удалите один из старых.",
-      },
-      { status: 409 },
-    );
+  if (!slot.ok) {
+    return NextResponse.json({ error: slot.error, message: slot.message }, { status: slot.status });
+  }
+  const alreadyMine = slot.alreadyMine;
+
+  let tokensRemaining = await getTokenBalanceForUser(userId);
+  if (!alreadyMine) {
+    const spend = await spendTokens(userId, ADD_COMPETITOR_COST, "competitor_youtube_add");
+    tokensRemaining = spend.balance;
+    if (!spend.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "insufficient_tokens",
+          tokensRemaining: spend.balance,
+          message: `Недостаточно токенов для добавления конкурента (нужно ${ADD_COMPETITOR_COST}).`,
+        },
+        { status: 402 },
+      );
+    }
   }
 
   const displayName = channel.snippet?.title ?? handle ?? resolvedChannelId;
@@ -521,6 +520,7 @@ export async function POST(req: Request) {
     detailsFetched,
     shortsFound,
     uploadsPlaylistId,
+    tokensRemaining,
     message,
   });
 }

@@ -1,9 +1,8 @@
-/** Стоимость одной генерации сценария (внутренние токены кошелька, не DeepSeek). */
+import { getActionTokenCost } from "@/lib/billing/billing.config";
+
+/** Стоимость одной генерации сценария (внутренние токены кошелька). */
 export function getScriptGenerationTokenCost(): number {
-  const raw = process.env.SCRIPT_GENERATION_TOKEN_COST?.trim();
-  const n = raw ? Number.parseInt(raw, 10) : 20;
-  if (!Number.isFinite(n) || n < 1) return 20;
-  return Math.min(n, 5000);
+  return getActionTokenCost("SCRIPT");
 }
 
 export function getDeepSeekEnv(): {

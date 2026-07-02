@@ -3,10 +3,11 @@ import { HOME_VIDEO_WHERE, videoHomeCardSelect } from "@/lib/prisma-video-select
 import { filterDisplayableVideos } from "@/lib/grid-video-display";
 import { videoToHomeCardJson } from "@/lib/serialize-video";
 
+/** Top popular shorts for the home grid (server-side selection). */
 export async function queryHomeVideoCards(limit: number, skip = 0) {
   const rows = await prisma.video.findMany({
     where: HOME_VIDEO_WHERE,
-    orderBy: [{ score: "desc" }, { viralScore: "desc" }],
+    orderBy: [{ score: "desc" }, { viralScore: "desc" }, { views: "desc" }],
     skip,
     take: limit,
     select: videoHomeCardSelect,

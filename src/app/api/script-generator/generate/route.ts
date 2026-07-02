@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAdminEvent, safeMeta } from "@/lib/admin-events";
 import { deepseekChatCompletion, DeepSeekError } from "@/lib/deepseek-generate";
-import { creditTokens, ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
+import { ensureSessionUser, creditTokens, spendTokens } from "@/lib/token-wallet";
 import { getDeepSeekEnv, getScriptGenerationTokenCost } from "@/lib/script-generator-config";
 import { USER_MSG } from "@/lib/api-user-messages";
 import { buildDeepSeekMessages, buildReferencesPromptBlock, SCRIPT_PROMPT_REF_ONLY } from "@/lib/script-generator-prompt";
 import { captureAiError } from "@/lib/sentry";
 
 export const dynamic = "force-dynamic";
+
+const SCRIPT_SPEND_REASON = "script_generator";
+const SCRIPT_REFUND_REASON = "script_generator_refund";
 
 const MAX_PROMPT = 8000;
 
@@ -126,28 +129,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const spend = await spendTokens(userId, cost, "script_generator", { sessionId: sessionKey });
-  if (!spend.ok) {
-    await logAdminEvent({
-      level: "warn",
-      type: "script_generate_error",
-      message: "Недостаточно токенов",
-      sessionId: sessionKey,
-      userId,
-      meta: safeMeta({ chatId, errorKind: "insufficient_tokens", cost, balance: spend.balance }),
-    });
-    return NextResponse.json(
-      { error: "insufficient_tokens", message: USER_MSG.tokensInsufficient, balance: spend.balance },
-      { status: 402 },
-    );
-  }
-
   try {
     await prisma.scriptMessage.create({
       data: { chatId, role: "user", content: storedUserContent },
     });
   } catch (e) {
-    await creditTokens(userId, cost, "script_generate_refund", { sessionId: sessionKey });
     await logAdminEvent({
       level: "error",
       type: "script_generate_error",
@@ -174,15 +160,34 @@ export async function POST(req: Request) {
   const systemChars = dsMessages[0]?.role === "system" ? dsMessages[0].content.length : 0;
   const historyUsed = dsMessages.length - 1;
 
+  const spend = await spendTokens(userId, cost, SCRIPT_SPEND_REASON, { sessionId: sessionKey });
+  if (!spend.ok) {
+    await logAdminEvent({
+      level: "warn",
+      type: "script_generate_error",
+      message: "Недостаточно токенов для генерации",
+      sessionId: sessionKey,
+      userId,
+      meta: safeMeta({ chatId, errorKind: "insufficient_tokens", cost, balance: spend.balance }),
+    });
+    return NextResponse.json(
+      { error: "insufficient_tokens", message: USER_MSG.tokensInsufficient, balance: spend.balance },
+      { status: 402 },
+    );
+  }
+
+  let balanceAfterSpend = spend.balance;
+
   let assistantText: string;
   try {
     const out = await deepseekChatCompletion(dsMessages);
     assistantText = out.text;
   } catch (e) {
-    await creditTokens(userId, cost, "script_generate_refund", { sessionId: sessionKey });
     const kind = e instanceof DeepSeekError ? e.kind : "unknown";
     const status = e instanceof DeepSeekError ? e.status : undefined;
     captureAiError("script_generate", e, { chatId, kind, status });
+    const refunded = await creditTokens(userId, cost, SCRIPT_REFUND_REASON, { sessionId: sessionKey, source: chatId });
+    balanceAfterSpend = refunded.balance;
     await logAdminEvent({
       level: "warn",
       type: "script_generate_error",
@@ -205,27 +210,8 @@ export async function POST(req: Request) {
           : kind === "abort"
             ? "Превышено время ожидания ответа."
             : "Не удалось получить ответ модели.";
-    return NextResponse.json({ error: "deepseek_failed", message: msg, refunded: true }, { status: 502 });
+    return NextResponse.json({ error: "deepseek_failed", message: msg }, { status: 502 });
   }
-
-  await logAdminEvent({
-    level: "info",
-    type: "script_token_spend",
-    message: "Списание за генерацию сценария",
-    sessionId: sessionKey,
-    userId,
-    meta: safeMeta({
-      chatId,
-      cost,
-      model,
-      balanceAfter: spend.balance,
-      inputCharsApprox: promptTrim.length + systemChars,
-      historyMessagesUsed: historyUsed,
-      importedVideosCount: importCount,
-      referencesCount: refCount,
-      durationMs: Date.now() - started,
-    }),
-  });
 
   let assistantRow: { id: string; role: string; content: string; createdAt: Date; savedVideoId: string | null };
   try {
@@ -254,22 +240,33 @@ export async function POST(req: Request) {
         ...compactErr(e),
       }),
     });
-    const balance = await getTokenBalanceForUser(userId);
-    return NextResponse.json({
-      error: "save_partial",
-      message: "Сценарий сгенерирован, но не удалось сохранить в историю. Текст ниже.",
-      assistantMessage: {
-        id: "local",
-        role: "assistant",
-        content: assistantText,
-        savedVideoId: null,
-        createdAt: new Date().toISOString(),
-      },
-      balance,
-    });
+    const refunded = await creditTokens(userId, cost, SCRIPT_REFUND_REASON, { sessionId: sessionKey, source: chatId });
+    balanceAfterSpend = refunded.balance;
+    return NextResponse.json(
+      { error: "save_failed", message: "Не удалось сохранить сценарий. Попробуйте снова." },
+      { status: 500 },
+    );
   }
 
-  const balance = await getTokenBalanceForUser(userId);
+  await logAdminEvent({
+    level: "info",
+    type: "script_token_spend",
+    message: "Списание за генерацию сценария",
+    sessionId: sessionKey,
+    userId,
+    meta: safeMeta({
+      chatId,
+      cost,
+      model,
+      balanceAfter: balanceAfterSpend,
+      inputCharsApprox: promptTrim.length + systemChars,
+      historyMessagesUsed: historyUsed,
+      importedVideosCount: importCount,
+      referencesCount: refCount,
+      durationMs: Date.now() - started,
+    }),
+  });
+
   await logAdminEvent({
     level: "info",
     type: "script_generate_success",
@@ -283,7 +280,7 @@ export async function POST(req: Request) {
       durationMs: Date.now() - started,
       importedVideosCount: importCount,
       cost,
-      balanceAfter: balance,
+      balanceAfter: balanceAfterSpend,
       inputCharsApprox: promptTrim.length + systemChars,
       historyMessagesUsed: historyUsed,
       referencesCount: refCount,
@@ -303,7 +300,7 @@ export async function POST(req: Request) {
       assistantBefore === 0 && (chat.title === "Новый чат" || chat.title.trim() === "Новый чат")
         ? nextScriptChatTitle(promptTrim, refRows[0])
         : chat.title,
-    balance,
+    balance: balanceAfterSpend,
   });
 }
 

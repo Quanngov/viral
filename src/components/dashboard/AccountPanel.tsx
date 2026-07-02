@@ -3,9 +3,11 @@
 import { DashboardModal } from "@/components/dashboard/DashboardModal";
 import {
   AccountPlansContent,
+  AccountTokensContent,
+} from "@/components/dashboard/billing-panels";
+import {
   AccountProfileContent,
   AccountSettingsContent,
-  AccountTokensContent,
 } from "@/components/dashboard/mock-dashboard-panels";
 
 export type AccountPanelTab = "settings" | "profile" | "plans" | "tokens";
@@ -45,7 +47,7 @@ export function AccountPanel({
       open={open}
       onClose={onClose}
       title="Аккаунт"
-      subtitle="Демо-интерфейс без сохранения в БД."
+      subtitle="Тарифы, токены и профиль."
       placement="center"
       wide
     >

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-01T00:00:00.000Z",
+  "title": "Design System: Viral",
+  "extensions": {
+    "colorMeta": {
+      "shell-bg": {
+        "role": "neutral",
+        "displayName": "Shell Gray",
+        "canonical": "oklch(96.2% 0.004 265)",
+        "tonalRamp": ["#09090b", "#18181b", "#27272a", "#3f3f46", "#52525b", "#71717a", "#a1a1aa", "#d4d4d8", "#e4e4e7", "#f4f5f7"]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Signal Emerald",
+        "canonical": "oklch(59.6% 0.145 163.2)",
+        "tonalRamp": ["#022c22", "#064e3b", "#047857", "#059669", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5", "#ecfdf5"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(21% 0.006 285.9)",
+        "tonalRamp": ["#09090b", "#18181b", "#27272a", "#3f3f46", "#52525b", "#71717a", "#a1a1aa", "#d4d4d8", "#e4e4e7", "#fafafa"]
+      },
+      "rating-mid": {
+        "role": "tertiary",
+        "displayName": "Amber Pulse",
+        "canonical": "oklch(76.9% 0.188 70.08)",
+        "tonalRamp": ["#451a03", "#78350f", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fde68a", "#fef3c7", "#fffbeb"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page titles and modal headers — one per region." },
+      "headline": { "displayName": "Headline", "purpose": "Section headers and plan names inside panels." },
+      "title": { "displayName": "Title", "purpose": "Nav items, buttons, card titles." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, forms, tables — max ~75ch in prose." },
+      "label": { "displayName": "Label", "purpose": "Compact mobile nav and metadata." },
+      "mono": { "displayName": "Mono", "purpose": "Token counts and technical values." }
+    },
+    "shadows": [
+      { "name": "panel-rest", "value": "0 1px 2px 0 rgb(24 24 27 / 0.05)", "purpose": "Default elevation for white panels and cards at rest." },
+      { "name": "card-hover", "value": "0 10px 15px -3px rgb(24 24 27 / 0.1)", "purpose": "Video cards and interactive tiles on hover." },
+      { "name": "badge-float", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1)", "purpose": "Score pills and platform badges on thumbnails." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default dashboard-ease transitions (300ms)." },
+      { "name": "ease-enter", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Video card staggered entrance." },
+      { "name": "duration-fast", "value": "300ms", "purpose": "Hover, color, and border transitions." },
+      { "name": "duration-enter", "value": "380ms", "purpose": "Card and message enter animations." }
+    ],
+    "breakpoints": [
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main forward action — sign in, upgrade, confirm.",
+      "html": "<button type=\"button\" class=\"ds-btn-primary\">Войти</button>",
+      "css": ".ds-btn-primary { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; line-height: 1.25; color: #ffffff; background-color: #059669; border: none; border-radius: 12px; padding: 10px 24px; cursor: pointer; box-shadow: 0 1px 2px 0 rgb(24 24 27 / 0.05); transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background-color: #047857; } .ds-btn-primary:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Alternate action on white surfaces.",
+      "html": "<button type=\"button\" class=\"ds-btn-secondary\">Регистрация</button>",
+      "css": ".ds-btn-secondary { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; line-height: 1.25; color: #27272a; background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 8px; padding: 8px 16px; cursor: pointer; transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), border-color 300ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-secondary:hover { background-color: #fafafa; border-color: #6ee7b7; color: #064e3b; } .ds-btn-secondary:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "description": "Auth and form fields.",
+      "html": "<input type=\"email\" class=\"ds-input\" placeholder=\"email@example.com\" />",
+      "css": ".ds-input { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; line-height: 1.5; color: #18181b; background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 12px; padding: 8px 12px; width: 100%; box-sizing: border-box; transition: border-color 300ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-input::placeholder { color: #71717a; } .ds-input:focus { outline: none; border-color: #34d399; }"
+    },
+    {
+      "name": "Nav Item Active",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Desktop sidebar active destination.",
+      "html": "<a href=\"#\" class=\"ds-nav-item ds-nav-item--active\"><span class=\"ds-nav-icon\" aria-hidden=\"true\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12\"/></svg></span>Главная</a>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; color: #27272a; text-decoration: none; border-radius: 8px; padding: 6px 8px; transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), color 300ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-nav-item:hover { background-color: #ecfdf5; color: #064e3b; } .ds-nav-item--active { background-color: #ecfdf5; color: #064e3b; } .ds-nav-icon { color: #059669; display: flex; }"
+    },
+    {
+      "name": "Video Card",
+      "kind": "card",
+      "refersTo": "video-card",
+      "description": "Primary content tile in search and trend grids.",
+      "html": "<button type=\"button\" class=\"ds-video-card\"><div class=\"ds-video-thumb\"><span class=\"ds-score ds-score--high\">92</span></div></button>",
+      "css": ".ds-video-card { display: block; width: 100%; text-align: left; background: #ffffff; border: none; border-radius: 16px; padding: 0; cursor: pointer; box-shadow: 0 1px 2px 0 rgb(24 24 27 / 0.05); overflow: hidden; transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-video-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgb(24 24 27 / 0.1); } .ds-video-card:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; } .ds-video-thumb { position: relative; aspect-ratio: 3 / 4; background: rgb(228 228 231 / 0.8); } .ds-score { position: absolute; top: 10px; right: 10px; font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 8px; border: 1px solid rgb(167 243 208 / 0.9); padding: 4px 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); } .ds-score--high { background: #059669; color: #ffffff; }"
+    },
+    {
+      "name": "Plan Card",
+      "kind": "card",
+      "description": "Billing tier tile on /billing.",
+      "html": "<article class=\"ds-plan-card\"><h3 class=\"ds-plan-title\">Pro</h3><p class=\"ds-plan-price\">2 490 ₽ / мес</p><button type=\"button\" class=\"ds-plan-cta\">Выбрать</button></article>",
+      "css": ".ds-plan-card { display: flex; flex-direction: column; border: 1px solid #e4e4e7; border-radius: 16px; padding: 16px; background: linear-gradient(to bottom, #ffffff, rgb(250 250 250 / 0.8)); box-shadow: 0 1px 2px 0 rgb(24 24 27 / 0.05); } .ds-plan-title { margin: 0; font-size: 1.125rem; font-weight: 600; color: #18181b; letter-spacing: -0.02em; } .ds-plan-price { margin: 8px 0 0; font-size: 0.875rem; color: #71717a; } .ds-plan-cta { margin-top: 16px; width: 100%; font-size: 0.875rem; font-weight: 600; color: #ffffff; background: #059669; border: none; border-radius: 12px; padding: 8px 16px; cursor: pointer; transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-plan-cta:hover { background: #047857; }"
+    },
+    {
+      "name": "Token Badge",
+      "kind": "chip",
+      "description": "Balance display in account panel.",
+      "html": "<div class=\"ds-token-badge\"><span class=\"ds-token-label\">Pro</span><span class=\"ds-token-value\">3 000</span></div>",
+      "css": ".ds-token-badge { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #a7f3d0; border-radius: 12px; background: #ecfdf5; padding: 8px 12px; box-shadow: 0 1px 2px 0 rgb(6 78 59 / 0.05); } .ds-token-label { font-size: 0.875rem; font-weight: 600; color: #064e3b; letter-spacing: -0.02em; } .ds-token-value { font-size: 1.125rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #064e3b; letter-spacing: -0.02em; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Radar",
+    "overview": "Viral is a product dashboard for solo creators hunting short-form trends — not another social feed. The interface stays light, structured, and legible: a soft zinc shell frames white work surfaces while emerald signals action, success, and active wayfinding. Thumbnails and scripts are the focal point; chrome recedes. The personality is a friendly guide: warm enough to encourage, restrained enough to respect focus.",
+    "keyCharacteristics": [
+      "Light shell + white panels — never cream/sand marketing warmth",
+      "Emerald as the sole accent for CTAs, active nav, and positive signals",
+      "Geist Sans for all UI; Geist Mono for code-like values when needed",
+      "Rounded corners (8–16px) with whisper shadows, not glass stacks",
+      "Video thumbnails carry visual energy; UI does not compete"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Emerald is the only chromatic accent for UI chrome. Amber appears only on score badges. No purple gradients, no second brand hue on buttons.", "section": "colors" },
+      { "name": "The Thumbnail Wins Rule", "body": "On video cards, color comes from the thumbnail and its gradient scrim — never from decorative UI frames around the media.", "section": "colors" },
+      { "name": "The Single Family Rule", "body": "Do not introduce a second sans-serif. Pairing happens through weight and size, not font mixing.", "section": "typography" },
+      { "name": "The Flat Chrome Rule", "body": "Navigation rails and shell backgrounds stay flat — no shadow on the sidebar canvas. Shadows belong on elevated white surfaces only.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the shell at #f4f5f7 and panels at white — the contrast defines the workspace.",
+      "Do use emerald for every primary action and active navigation state.",
+      "Do let video thumbnails dominate color in the main content area.",
+      "Do use dashboard-ease transitions (300ms, cubic-bezier(0.4, 0, 0.2, 1)) for hover and state changes.",
+      "Do honor prefers-reduced-motion — disable card enter, glass pulse, and typing dot animations.",
+      "Do write UI copy in clear Russian; keep labels short for narrow mobile nav."
+    ],
+    "donts": [
+      "Don't build noisy social-feed UI — no infinite-scroll chaos, loud colors, or attention-bait chrome.",
+      "Don't use generic SaaS templates — cream dashboards, purple gradient heroes, interchangeable metric cards.",
+      "Don't ship AI-template tells — gradient text, eyebrow kickers on every section, identical icon-card grids, side-stripe accent borders.",
+      "Don't default to glassmorphism on panels; glass pulse is for thumbnail loading only.",
+      "Don't add a second accent color for navigation or marketing surfaces.",
+      "Don't use muted gray (zinc-400 and lighter) for body text on tinted backgrounds — bump toward ink."
+    ]
+  }
+}

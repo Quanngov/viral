@@ -10,8 +10,9 @@ import { computeFeedVideoStats } from "@/lib/feed/feed-log-stats";
 import { ingestYouTubeShortsForQuery } from "@/lib/feed/ingest-youtube";
 import { upsertInstagramReelsFromTikHub } from "@/lib/feed/ingest-instagram";
 import { searchInstagramReelsTikHub } from "@/lib/providers/tikhubInstagram";
-import { pickSmartMixedBatch } from "@/lib/smart-mix";
-import { ensureSessionUser, getTokenBalanceForUser, spendTokens } from "@/lib/token-wallet";
+import { pickFeedBatch } from "@/lib/smart-mix";
+import { getActionTokenCost } from "@/lib/billing/billing.config";
+import { ensureSessionUser, spendTokens } from "@/lib/token-wallet";
 import { videoToClientJson } from "@/lib/serialize-video";
 import { sortVideosList } from "@/lib/video-sort";
 import { videoClientId } from "@/lib/video-client-id";
@@ -22,7 +23,6 @@ import type { ApiSort, PeriodApi } from "@/lib/search-query";
 export const dynamic = "force-dynamic";
 
 const BATCH = 8;
-const TOKEN_COST = 5;
 const THRESH_MORE = 14;
 
 type Body = {
@@ -37,7 +37,6 @@ type Body = {
   languageMode?: "world" | "ru" | "en";
   region?: string;
   language?: string;
-  tokenCost?: number;
 };
 
 function parsePlatform(p: string | undefined): FeedFilterPayload["platform"] {
@@ -89,12 +88,13 @@ async function loadAndPick(args: {
   const matching = rows.filter((v) => videoMatchesFeedFilters(v, args.filters, args.now));
   const unseen = matching.filter((v) => !args.seen.has(videoClientId(v.platform, v.externalId)));
   const sortedPool = sortVideosList(unseen, args.sort) as Video[];
-  const picked = pickSmartMixedBatch(sortedPool, args.batchIndex, BATCH, {
+  const picked = pickFeedBatch(sortedPool, args.batchIndex, BATCH, {
     mode: args.mixMode,
     now: args.now,
     platformFilter: args.filters.platform,
     minViewsFloor: args.filters.minViews,
     mixSeed: args.mixSeed,
+    sort: args.sort,
   });
   return {
     picked,
@@ -121,7 +121,8 @@ export async function POST(req: Request) {
   }
 
   const { userId, sessionKey } = await ensureSessionUser();
-  const cost = Math.min(100, Math.max(1, Number(body.tokenCost) || TOKEN_COST));
+  const cost =
+    action === "more" ? getActionTokenCost("LOAD_MORE") : getActionTokenCost("SEARCH");
 
   // Record search query log
   if (q && q.length <= 120) {
@@ -188,33 +189,10 @@ export async function POST(req: Request) {
       languageMode,
       batchIndex,
       seenIdsCount: seen.size,
-      tokenCost: action === "more" ? cost : 0,
+      tokenCost: cost,
     }),
   });
 
-  if (action === "more") {
-    const spend = await spendTokens(userId, cost, "feed_show_more", { sessionId: sessionKey });
-    if (!spend.ok) {
-      await logAdminEvent({
-        level: "warn",
-        type: "feed_more",
-        message: "Отказ: недостаточно токенов",
-        sessionId: sessionKey,
-        userId,
-        meta: safeMeta({ cost, balance: spend.balance }),
-      });
-      return NextResponse.json(
-        {
-          tokensOk: false,
-          tokensRemaining: spend.balance,
-          videos: [],
-          noMore: true,
-          message: USER_MSG.tokensInsufficient,
-        },
-        { status: 402 },
-      );
-    }
-  }
 
   const prismaWhere = buildFeedVideoPrismaWhere({
     q,
@@ -266,6 +244,21 @@ export async function POST(req: Request) {
     (action === "search" && platform !== "youtube" && round.picked.length < 8 && canExternalSearch) ||
     (action === "more" && platform !== "youtube" && (lowPool || (platform === "all" && round.unseenInstagramInPool === 0)))
   );
+
+  const spendReason = action === "more" ? "feed_show_more" : "feed_search";
+  const spend = await spendTokens(userId, cost, spendReason, { sessionId: sessionKey });
+  if (!spend.ok) {
+    return NextResponse.json(
+      {
+        tokensOk: false,
+        tokensRemaining: spend.balance,
+        videos: [],
+        noMore: action === "more",
+        message: USER_MSG.tokensInsufficient,
+      },
+      { status: 402 },
+    );
+  }
 
   if ((action === "search" || action === "more") && (wantYt || wantIg)) {
     await logAdminEvent({
@@ -386,8 +379,6 @@ export async function POST(req: Request) {
     }),
   });
 
-  const tokensRemaining = await getTokenBalanceForUser(userId);
-
   const noMore = picked.length === 0 && action === "more";
 
   // Устанавливаем userHint если мало роликов
@@ -405,7 +396,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     tokensOk: true,
-    tokensRemaining,
+    tokensRemaining: spend.balance,
     videos: picked.map(videoToClientJson),
     noMore,
     userHint: feedUserHint,

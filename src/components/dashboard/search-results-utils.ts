@@ -101,51 +101,28 @@ export function applyVideoFilters(inputVideos: GridVideo[], active: SearchGridFi
     const bv = parseViews(b.views);
     const ad = getPublishedDate(a)?.getTime() ?? 0;
     const bd = getPublishedDate(b)?.getTime() ?? 0;
-    const as = a.score ?? null;
-    const bs = b.score ?? null;
+    const ar = a.rating ?? a.score ?? 0;
+    const br = b.rating ?? b.score ?? 0;
     const aviral = a.viralScore ?? 0;
     const bviral = b.viralScore ?? 0;
 
     switch (active.sort) {
       case "views_desc":
-        return bv - av;
+        return bv - av || br - ar;
       case "views_asc":
-        return av - bv;
+        return av - bv || ar - br;
       case "date_desc":
-        return bd - ad;
+        return bd - ad || bv - av;
       case "date_asc":
-        return ad - bd;
+        return ad - bd || av - bv;
       case "viral_desc":
-        if (as != null && bs != null) return bs - as;
-        return bviral - aviral;
+        return bviral - aviral || br - ar || bv - av;
       case "viral_asc":
-        if (as != null && bs != null) return as - bs;
-        return aviral - bviral;
+        return aviral - bviral || ar - br || av - bv;
       default:
         return 0;
     }
   });
 
   return filtered;
-}
-
-function scoreValue(v: GridVideo): number {
-  return typeof v.score === "number" ? v.score : 0;
-}
-
-export function buildDisplayOrder(inputVideos: GridVideo[]): GridVideo[] {
-  if (inputVideos.length <= 1) return inputVideos;
-  const byScore = new Map<number, GridVideo[]>();
-  for (const v of inputVideos) {
-    const s = scoreValue(v);
-    const bucket = byScore.get(s);
-    if (bucket) bucket.push(v);
-    else byScore.set(s, [v]);
-  }
-  const orderedScores = Array.from(byScore.keys()).sort((a, b) => b - a);
-  const out: GridVideo[] = [];
-  for (const s of orderedScores) {
-    out.push(...(byScore.get(s) ?? []).sort((a, b) => a.id.localeCompare(b.id)));
-  }
-  return out;
 }

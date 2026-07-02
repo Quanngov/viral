@@ -69,7 +69,7 @@ export type MockUser = {
 export const mockUser: MockUser = {
   email: "creator@studio.media",
   plan: "Pro",
-  tokens: 12400,
+  tokens: 60,
 };
 
 export const mockLiveTrends: LiveTrendVideo[] = [

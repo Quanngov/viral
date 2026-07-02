@@ -1,10 +1,24 @@
-/** Максимум профилей конкурентов на пользователя. */
-export const MAX_COMPETITORS_PER_USER = 10;
+import {
+  getActionTokenCost,
+  getMaxCompetitorsForPlan,
+  type BillingPlanId,
+} from "@/lib/billing/billing.config";
+import { getMaxCompetitorsForUser } from "@/lib/billing/billing-service";
 
-/** Списание за дневной доступ к одному профилю (Instagram и YouTube одинаково). */
-export const COMPETITOR_DAILY_SYNC_TOKEN_COST = Number(
-  process.env.COMPETITOR_DAILY_SYNC_TOKEN_COST ?? "5",
-);
+export { getActionTokenCost };
+
+/** @deprecated Используйте getMaxCompetitorsForUser(userId) на сервере. */
+export const MAX_COMPETITORS_PER_USER = 100;
+
+export async function resolveMaxCompetitorsForUser(userId: string): Promise<number> {
+  return getMaxCompetitorsForUser(userId);
+}
+
+export function getMaxCompetitorsForPlanId(planId: BillingPlanId): number {
+  return getMaxCompetitorsForPlan(planId);
+}
+
+export const COMPETITOR_DAILY_SYNC_TOKEN_COST = getActionTokenCost("DAILY_SYNC");
 
 /** Сколько профилей обновлять внешним API за один вызов action=initial. */
 export const DAILY_SYNC_INITIAL_PROFILE_CAP = 3;

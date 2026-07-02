@@ -8,7 +8,7 @@ import { logInfo, logRouteError } from "@/lib/server-log";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-/** Read-only poll; pool fill + publish runs via POST /api/trends/lazy-refresh only. */
+/** Poll publishes due queued trends (max 1) and returns the live published list. */
 export const GET = withTimedRoute("trends.realtime.GET", async (req) => {
   try {
     const url = new URL(req.url);
@@ -25,7 +25,7 @@ export const GET = withTimedRoute("trends.realtime.GET", async (req) => {
       newItems,
       meta: {
         totalPublished: trends.length,
-        newItemsCount: 0,
+        newItemsCount: newItems.length,
         timestamp: new Date().toISOString(),
       },
     });

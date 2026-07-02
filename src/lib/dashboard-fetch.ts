@@ -1,4 +1,4 @@
-import { cachedFetch, peekCached, seedCached } from "@/lib/client-fetch-cache";
+import { cachedFetch, invalidateCached, peekCached, seedCached } from "@/lib/client-fetch-cache";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import { HOME_SSR_LIMIT } from "@/lib/dashboard-initial";
 import type { GridVideo } from "@/lib/mock-data";
@@ -68,6 +68,18 @@ export function loadTokenBalance() {
   return cachedFetch(CACHE_KEYS.tokens, fetchTokenBalance, { ttlMs: 45_000, staleMs: 120_000 });
 }
 
+export function invalidateTokenBalanceCache(): void {
+  invalidateCached(CACHE_KEYS.tokens);
+}
+
+/** Обновить кэш баланса после spend (без ожидания TTL). */
+export function publishTokenBalance(balance: number): void {
+  seedCached(CACHE_KEYS.tokens, balance);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("viral:tokens-updated", { detail: { balance } }));
+  }
+}
+
 export type TrendsPayload = {
   trends: unknown[];
   newItems: unknown[];
@@ -120,8 +132,14 @@ export async function fetchSavedMap(): Promise<Record<string, boolean>> {
   const res = await fetch("/api/saved-videos");
   if (!res.ok) return {};
   const data = (await res.json()) as { videos?: { platform: string; externalId: string }[] };
+  const videos = data.videos ?? [];
+  seedCached(
+    CACHE_KEYS.savedList,
+    { videos } satisfies SavedListPayload,
+    { persist: true },
+  );
   const next: Record<string, boolean> = {};
-  for (const v of data.videos ?? []) {
+  for (const v of videos) {
     next[`${v.platform}:${v.externalId}`] = true;
   }
   return next;

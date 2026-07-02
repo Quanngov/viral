@@ -6,19 +6,17 @@ import type { FeedPlatformMode } from "@/lib/search-query";
 import { uiLocaleToApi, uiPeriodToApi } from "@/lib/search-query";
 import { SearchToolbar } from "@/components/dashboard/SearchToolbar";
 import type { SearchFiltersPayload, SearchSubmitPayload } from "@/components/dashboard/SearchToolbar";
-import {
-  applyVideoFilters,
-  buildDisplayOrder,
-  type SearchGridFilters,
-} from "@/components/dashboard/search-results-utils";
+import { applyVideoFilters, type SearchGridFilters } from "@/components/dashboard/search-results-utils";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
 import { VideoGridSkeleton } from "@/components/dashboard/DashboardSkeletons";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
+import { HOME_SSR_LIMIT } from "@/lib/dashboard-initial";
 import {
   fetchHomeVideoCountLazy,
   fetchHomeVideos,
   persistHomeGridCache,
   peekHomeGridCache,
+  publishTokenBalance,
 } from "@/lib/dashboard-fetch";
 import { filterDisplayableVideos } from "@/lib/grid-video-display";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
@@ -45,14 +43,15 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     [initialHome.homeVideos],
   );
   const [sourceVideos, setSourceVideos] = useState<GridVideo[]>(ssrVideos);
-  const [loading, setLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [loadMoreLoading, setLoadMoreLoading] = useState(false);
   const [homeReady, setHomeReady] = useState(() => ssrVideos.length > 0);
   const [gridFadeIn, setGridFadeIn] = useState(() => ssrVideos.length > 0);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [, setTokensRemaining] = useState<number | null>(null);
   const [session, setSession] = useState<FeedSession | null>(null);
   const [noMore, setNoMore] = useState(false);
+  const [appendFrom, setAppendFrom] = useState(0);
   const feedBatchIndexRef = useRef(1);
   const [searchSteps, setSearchSteps] = useState<{
     step1: "pending" | "active" | "completed";
@@ -68,10 +67,10 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     platformMode: "all",
   });
 
-  const videos = useMemo(() => {
-    const filtered = applyVideoFilters(sourceVideos, filters);
-    return buildDisplayOrder(filtered);
-  }, [sourceVideos, filters]);
+  const videos = useMemo(
+    () => (session ? applyVideoFilters(sourceVideos, filters) : sourceVideos),
+    [sourceVideos, filters, session],
+  );
 
   useEffect(() => {
     if (sourceVideos.length === 0) return;
@@ -89,10 +88,28 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
 
   useEffect(() => {
     let alive = true;
+
+    if (ssrVideos.length > 0) {
+      const countTimer = window.setTimeout(() => {
+        void (async () => {
+          try {
+            const count = await fetchHomeVideoCountLazy();
+            if (alive && count !== null) setTotalCount(count);
+          } catch {
+            /* stats optional */
+          }
+        })();
+      }, 10_000);
+      return () => {
+        alive = false;
+        window.clearTimeout(countTimer);
+      };
+    }
+
     const phase2 = window.setTimeout(() => {
       void (async () => {
         try {
-          const { videos } = await fetchHomeVideos(24);
+          const { videos } = await fetchHomeVideos(HOME_SSR_LIMIT);
           if (!alive) return;
           const valid = filterDisplayableVideos(videos);
           if (valid.length > 0) {
@@ -120,7 +137,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
       alive = false;
       window.clearTimeout(phase2);
     };
-  }, []);
+  }, [ssrVideos.length]);
 
   function localeToLanguageMode(locale: string): "world" | "ru" | "en" {
     if (locale === "Русский") return "ru";
@@ -147,13 +164,26 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     return { res, data };
   }
 
+  function applyTokensRemaining(tokensRemaining: number | undefined) {
+    if (typeof tokensRemaining === "number") {
+      publishTokenBalance(tokensRemaining);
+    }
+  }
+
+  function mergeFeedVideos(prev: GridVideo[], chunk: GridVideo[]): GridVideo[] {
+    const seen = new Set(prev.map((v) => v.id));
+    const added = chunk.filter((v) => !seen.has(v.id));
+    return [...prev, ...added];
+  }
+
   async function runSearch(payload: SearchSubmitPayload) {
     const q = payload.q.trim();
     if (!q) return;
 
-    setLoading(true);
+    setSearchLoading(true);
     setError(null);
     setNoMore(false);
+    setAppendFrom(0);
     setSourceVideos([]);
 
     // Анимация поиска
@@ -188,7 +218,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
         language,
       });
 
-      if (typeof data.tokensRemaining === "number") setTokensRemaining(data.tokensRemaining);
+      applyTokensRemaining(data.tokensRemaining);
 
       if (res.status === 402 || data.tokensOk === false) {
         setError(messageForHttpStatus(402, data.message));
@@ -205,21 +235,22 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
 
       setSession({ q, platform: payload.platform, locale: payload.locale });
       feedBatchIndexRef.current = 1;
+      setAppendFrom(0);
       setSourceVideos(Array.isArray(data.videos) ? data.videos : []);
       setNoMore(Boolean(data.noMore));
       if (typeof data.totalCount === "number") setTotalCount(data.totalCount);
     } catch (e) {
       setError(sanitizeClientErrorMessage(e instanceof Error ? e.message : ""));
     } finally {
-      setLoading(false);
+      setSearchLoading(false);
       // Завершаем анимацию
       setSearchSteps({ step1: "completed", step2: "completed", step3: "completed" });
     }
   }
 
   async function loadMore() {
-    if (!session || loading) return;
-    setLoading(true);
+    if (!session || searchLoading || loadMoreLoading) return;
+    setLoadMoreLoading(true);
     setError(null);
     try {
       const { region, language } = uiLocaleToApi(session.locale);
@@ -239,7 +270,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
         language,
       });
 
-      if (typeof data.tokensRemaining === "number") setTokensRemaining(data.tokensRemaining);
+      applyTokensRemaining(data.tokensRemaining);
 
       if (res.status === 402 || data.tokensOk === false) {
         setError(messageForHttpStatus(402, data.message));
@@ -259,7 +290,12 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
         setNoMore(true);
         setError(null);
       } else {
-        setSourceVideos((prev) => [...prev, ...chunk]);
+        let appendStart = 0;
+        setSourceVideos((prev) => {
+          appendStart = prev.length;
+          return mergeFeedVideos(prev, chunk);
+        });
+        setAppendFrom(appendStart);
         feedBatchIndexRef.current += 1;
         setNoMore(Boolean(data.noMore));
       }
@@ -267,7 +303,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     } catch (e) {
       setError(sanitizeClientErrorMessage(e instanceof Error ? e.message : ""));
     } finally {
-      setLoading(false);
+      setLoadMoreLoading(false);
     }
   }
 
@@ -305,11 +341,11 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
   }, [homeReady]);
 
   const isSearchMode = Boolean(session);
-  const showGridSkeleton = isSearchMode ? loading : !homeReady;
+  const showGridSkeleton = isSearchMode ? searchLoading : !homeReady;
   const displayedVideos = videos;
-  const showLoadMore = Boolean(session) && !loading && homeReady && !noMore;
+  const showLoadMore = Boolean(session) && !searchLoading && !loadMoreLoading && homeReady && !noMore;
   const showHomeEmpty = homeReady && !session && displayedVideos.length === 0;
-  const showSearchEmpty = homeReady && session && !loading && displayedVideos.length === 0;
+  const showSearchEmpty = homeReady && session && !searchLoading && displayedVideos.length === 0;
 
   const statsParts: string[] = [];
   if (totalCount !== null) {
@@ -320,7 +356,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     <div className="flex flex-col gap-3 rounded-2xl bg-transparent px-0 pb-4 pt-1">
       <SearchToolbar
         searchCost={searchCost}
-        searching={loading}
+        searching={searchLoading}
         onSubmitSearch={runSearch}
         onFiltersChange={onFiltersChange}
       />
@@ -336,7 +372,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
       ) : null}
 
       {/* Анимация поиска */}
-      {loading && (searchSteps.step1 !== "pending" || searchSteps.step2 !== "pending" || searchSteps.step3 !== "pending") ? (
+      {searchLoading && (searchSteps.step1 !== "pending" || searchSteps.step2 !== "pending" || searchSteps.step3 !== "pending") ? (
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
           <div className="flex items-center gap-2 mb-3">
             <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
@@ -392,16 +428,21 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
                 gridFadeIn ? "opacity-100" : "opacity-0"
               }`}
             >
-              <VideoGrid videos={displayedVideos} onVideoClick={onVideoClick} />
+              <VideoGrid videos={displayedVideos} appendFrom={appendFrom} onVideoClick={onVideoClick} />
             </div>
           )}
+          {loadMoreLoading ? (
+            <div className="mt-2">
+              <VideoGridSkeleton count={4} />
+            </div>
+          ) : null}
           {showLoadMore ? (
             <div className="mt-1 flex justify-center">
               <button
                 type="button"
                 onClick={loadMore}
                 className="inline-flex min-h-[2.75rem] min-w-[10.5rem] items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-600/20 transition-colors hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-50"
-                disabled={loading || !homeReady}
+                disabled={searchLoading || loadMoreLoading || !homeReady}
               >
                 <LightningIcon className="h-4 w-4 shrink-0 text-emerald-100" />
                 <span className="tabular-nums">{searchCost}</span>

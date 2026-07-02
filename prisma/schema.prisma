@@ -229,6 +229,8 @@ model SessionUser {
 
   userTokenBalance     UserTokenBalance?
   tokenTransactions    TokenTransaction[]
+  userSubscription     UserSubscription?
+  billingOrders        BillingOrder[]
   savedVideos          SavedVideo[]
   competitorAccounts   CompetitorAccount[]
   competitorDailySyncs CompetitorDailySync[]
@@ -342,23 +344,93 @@ model SavedVideo {
 }
 
 model UserTokenBalance {
-  id        String     @id @default(cuid())
-  userId    String     @unique
-  user      SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balance   Int        @default(12400)
-  updatedAt DateTime @updatedAt
+  id            String      @id @default(cuid())
+  userId        String      @unique
+  user          SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance       Int         @default(0)
+  totalSpent    Int         @default(0)
+  totalGranted  Int         @default(0)
+  lastGrantedAt DateTime?
+  updatedAt     DateTime    @updatedAt
+}
+
+model UserSubscription {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /** FREE | TRIAL | PRO | BUSINESS */
+  plan               String   @default("FREE")
+  /** ACTIVE | TRIAL | CANCELLED | EXPIRED | PAST_DUE */
+  status             String   @default("ACTIVE")
+  /** MONTHLY | YEARLY | null for FREE/TRIAL */
+  billingInterval    String?
+  startedAt          DateTime @default(now())
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  renewsAt           DateTime?
+  trialEndsAt        DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([plan])
+  @@index([status])
 }
 
 model TokenTransaction {
-  id        String   @id @default(cuid())
-  userId    String
-  user      SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  userId        String
+  user          SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /** SUBSCRIPTION_GRANT | TRIAL_GRANT | FREE_GRANT | TOKEN_PACK | SPEND | REFUND | ADMIN_ADJUSTMENT */
+  type          String
   /** Отрицательное — списание, положительное — начисление. */
-  amount    Int
-  reason    String
-  createdAt DateTime @default(now())
+  amount        Int
+  balanceBefore Int
+  balanceAfter  Int
+  /** Код причины: feed_search, script_generator, … */
+  reason        String
+  /** Доп. источник: plan id, pack id, order id */
+  source        String?
+  metaJson      String?
+  createdAt     DateTime    @default(now())
 
-  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([type])
+}
+
+model BillingOrder {
+  id            String      @id @default(cuid())
+  userId        String
+  user          SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /** SUBSCRIPTION | TOKEN_PACK */
+  kind          String
+  /** PRO | BUSINESS | SMALL | MEDIUM | LARGE */
+  productId     String
+  /** MONTHLY | YEARLY for subscriptions */
+  billingInterval String?
+  amountRub     Int
+  tokensGrant   Int         @default(0)
+  /** PENDING | PAID | CANCELLED | FAILED */
+  status        String      @default("PENDING")
+  paidAt        DateTime?
+  externalId    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/** Разовые FREE/TRIAL начисления — один раз на Auth User (не на cookie/SessionUser). */
+model AuthBillingGrant {
+  id            String   @id @default(cuid())
+  authUserId    String
+  grantType     String
+  sessionUserId String
+  createdAt     DateTime @default(now())
+
+  @@unique([authUserId, grantType])
+  @@index([authUserId])
 }
 
 model AdminEvent {
