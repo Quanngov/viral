@@ -5,10 +5,8 @@ import {
   AccountPlansContent,
   AccountTokensContent,
 } from "@/components/dashboard/billing-panels";
-import {
-  AccountProfileContent,
-  AccountSettingsContent,
-} from "@/components/dashboard/mock-dashboard-panels";
+import { UserProfilePanel } from "@/components/dashboard/UserProfilePanel";
+import { AccountSettingsContent } from "@/components/dashboard/mock-dashboard-panels";
 
 export type AccountPanelTab = "settings" | "profile" | "plans" | "tokens";
 
@@ -71,13 +69,7 @@ export function AccountPanel({
       <div className="mt-4">
         {activeTab === "settings" ? <AccountSettingsContent /> : null}
         {activeTab === "profile" ? (
-          <AccountProfileContent
-            email={email}
-            plan={plan}
-            balanceTokens={balanceTokens}
-            onLogin={onLogin}
-            onLogout={onLogout}
-          />
+          <UserProfilePanel email={email} plan={plan} balanceTokens={balanceTokens} />
         ) : null}
         {activeTab === "plans" ? <AccountPlansContent balanceTokens={balanceTokens} /> : null}
         {activeTab === "tokens" ? <AccountTokensContent balanceTokens={balanceTokens} /> : null}

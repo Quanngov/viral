@@ -14,6 +14,7 @@ import {
   SCRIPT_REF_LIMIT_MESSAGE,
 } from "@/lib/script-shared-constants";
 import { useToast } from "@/components/dashboard/ToastContext";
+import { useAuthGateOptional } from "@/components/dashboard/AuthGateProvider";
 
 type ChatSummary = { id: string; title: string; updatedAt: string; createdAt: string };
 
@@ -181,6 +182,7 @@ type ScriptGeneratorSectionProps = {
 
 export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSectionProps) {
   const { showToast } = useToast();
+  const authGate = useAuthGateOptional();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -422,6 +424,7 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
   }, [profileText, profileReady, persistProfile]);
 
   const onNewChat = useCallback(async (): Promise<string | null> => {
+    if (authGate && !authGate.ensureRegistered("script", () => onNewChat())) return null;
     setError(null);
     setNotice(null);
     setChatMenuOpen(false);
@@ -442,7 +445,7 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
     setReferences([]);
     setPrompt("");
     return data.chat.id;
-  }, []);
+  }, [authGate]);
 
   const onSelectChat = useCallback((id: string) => {
     if (!id) return;
@@ -614,6 +617,7 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
 
   const onGenerate = useCallback(async () => {
     if (!selectedChatId || generating) return;
+    if (authGate && !authGate.ensureRegistered("script", () => onGenerate())) return;
     const promptTrim = prompt.trim();
     if (!promptTrim && references.length === 0) return;
 
@@ -675,6 +679,7 @@ export function ScriptGeneratorSection({ active = true }: ScriptGeneratorSection
     loadChats,
     showToast,
     scrollToBottom,
+    authGate,
   ]);
 
   useEffect(() => {

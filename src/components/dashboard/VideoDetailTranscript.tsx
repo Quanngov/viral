@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { GridVideo } from "@/lib/mock-data";
 import { transcribePostBodyFromGridVideo, transcribeSearchParamsFromGridVideo } from "@/components/dashboard/video-transcribe-client";
 import { useToast } from "@/components/dashboard/ToastContext";
+import { useAuthGateOptional } from "@/components/dashboard/AuthGateProvider";
 import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
 
 /** Совпадает с текстом в `api/videos/transcribe` для YouTube без субтитров. */
@@ -47,6 +48,7 @@ function TokenSpark({ className }: { className?: string }) {
 export function VideoDetailTranscript({ video, onClose }: { video: GridVideo; onClose: () => void }) {
   const router = useRouter();
   const { showToast } = useToast();
+  const authGate = useAuthGateOptional();
   const [hydrating, setHydrating] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [transcriptStatus, setTranscriptStatus] = useState<string | null>(null);
@@ -99,6 +101,7 @@ export function VideoDetailTranscript({ video, onClose }: { video: GridVideo; on
   }, [transcriptStatus, hydrating, hydrate]);
 
   const onTranscribe = useCallback(async () => {
+    if (authGate && !authGate.ensureRegistered("transcribe", () => onTranscribe())) return;
     setSubmitting(true);
     setPanelError(null);
     try {
@@ -144,7 +147,7 @@ export function VideoDetailTranscript({ video, onClose }: { video: GridVideo; on
     } finally {
       setSubmitting(false);
     }
-  }, [video, showToast]);
+  }, [video, showToast, authGate]);
 
   const onUseInScript = useCallback(() => {
     try {

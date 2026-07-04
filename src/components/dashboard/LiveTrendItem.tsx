@@ -1,4 +1,4 @@
-import type { LiveTrendVideo } from "@/lib/mock-data";
+import type { LiveTrendVideo } from "@/lib/trends-display";
 import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
 
 type LiveTrendItemProps = {
@@ -15,6 +15,7 @@ export function LiveTrendItem({ video, onClick }: LiveTrendItemProps) {
     >
       <div className="relative h-14 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-100 ring-1 ring-zinc-900/5">
         <VideoThumbnail
+          platform={video.platform}
           clientId={video.id}
           thumbnailUrl={video.thumbnailUrl}
           alt=""

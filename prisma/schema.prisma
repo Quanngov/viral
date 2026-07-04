@@ -236,6 +236,25 @@ model SessionUser {
   competitorDailySyncs CompetitorDailySync[]
   scriptChats          ScriptChat[]
   scriptUserProfile    ScriptUserProfile?
+  onboardingProfile    UserOnboardingProfile?
+}
+
+/** Онбординг и публичный профиль создателя (соцсети, ниша, ссылки). */
+model UserOnboardingProfile {
+  id                String      @id @default(cuid())
+  userId            String      @unique
+  user              SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instagramUsername String      @default("")
+  tiktokUsername    String      @default("")
+  youtubeChannel    String      @default("")
+  /** Одна роль: Эксперт, Блогер, … */
+  creatorType       String      @default("")
+  contentNiches     String[]    @default([])
+  referenceLinks    String[]    @default([])
+  onboardingDoneAt  DateTime?
+  updatedAt         DateTime    @updatedAt
+
+  @@index([userId])
 }
 
 /** Настройки сценариста для генерации (одна запись на session user). */

@@ -11,6 +11,8 @@ import { SearchResultsSection } from "@/components/dashboard/SearchResultsSectio
 import { VideoDetailPanel } from "@/components/dashboard/VideoDetailPanel";
 import { ScriptsSection } from "@/components/dashboard/ScriptsSection";
 import { AuthSessionProvider } from "@/components/dashboard/AuthSessionProvider";
+import { AuthGateProvider } from "@/components/dashboard/AuthGateProvider";
+import { OnboardingHost } from "@/components/dashboard/onboarding/OnboardingHost";
 import { UserPanel, type DashboardView } from "@/components/dashboard/UserPanel";
 import { DashboardTabPanel } from "@/components/dashboard/DashboardTabPanel";
 import { WeeklyTrendsSection } from "@/components/dashboard/WeeklyTrendsSection";
@@ -55,9 +57,11 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
 
   return (
     <AuthSessionProvider>
-    <ToastProvider>
-      <SavedVideosProvider>
-        <DashboardLayout>
+      <AuthGateProvider>
+        <OnboardingHost initial={initial} />
+        <ToastProvider>
+          <SavedVideosProvider>
+            <DashboardLayout>
           <div className="flex h-dvh min-h-0 w-full overflow-hidden">
             <aside className="z-20 hidden h-dvh w-[360px] shrink-0 flex-col gap-3 overflow-hidden bg-[#f4f5f7] py-2 pl-2 pr-3 lg:flex">
               <section className="min-h-0 flex-1 overflow-hidden">
@@ -117,9 +121,10 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
           activeView={activeView}
           onClose={() => setSelectedVideo(null)}
         />
-      </DashboardLayout>
-      </SavedVideosProvider>
-    </ToastProvider>
+            </DashboardLayout>
+          </SavedVideosProvider>
+        </ToastProvider>
+      </AuthGateProvider>
     </AuthSessionProvider>
   );
 }

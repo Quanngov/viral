@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useToast } from "@/components/dashboard/ToastContext";
+import { useAuthGateOptional } from "@/components/dashboard/AuthGateProvider";
 import type { GridVideo } from "@/lib/mock-data";
 import { gridVideoToSavePayload, type SaveVideoSourceType } from "@/lib/saved-video-mapper";
 import { parseVideoClientId } from "@/lib/video-client-id";
@@ -43,6 +44,7 @@ function toSavedMap(raw: Record<string, boolean>): SavedMap {
 
 export function SavedVideosProvider({ children }: { children: ReactNode }) {
   const { showToast } = useToast();
+  const authGate = useAuthGateOptional();
   const [savedMap, setSavedMap] = useState<SavedMap>({});
   const [removedSavedClientIds, setRemovedSavedClientIds] = useState<Set<string>>(() => new Set());
   const [lastError, setLastError] = useState<string | null>(null);
@@ -112,7 +114,7 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
     [savedMap],
   );
 
-  const toggle = useCallback(
+  const performToggle = useCallback(
     async (video: GridVideo, opts?: { sourceType?: SaveVideoSourceType; sourceId?: string | null }) => {
       const clientId = video.id;
       const parsed = parseVideoClientId(clientId);
@@ -169,6 +171,17 @@ export function SavedVideosProvider({ children }: { children: ReactNode }) {
       }
     },
     [savedMap, markRemovedFromSavedList, showToast],
+  );
+
+  const toggle = useCallback(
+    async (video: GridVideo, opts?: { sourceType?: SaveVideoSourceType; sourceId?: string | null }) => {
+      if (authGate && !authGate.isRegistered) {
+        authGate.ensureRegistered("save_video", () => performToggle(video, opts));
+        return false;
+      }
+      return performToggle(video, opts);
+    },
+    [authGate, performToggle],
   );
 
   const savedCount = useMemo(() => Object.keys(savedMap).filter((k) => savedMap[k]).length, [savedMap]);

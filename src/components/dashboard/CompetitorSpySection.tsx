@@ -12,6 +12,7 @@ import { videoClientId } from "@/lib/video-client-id";
 import { PlatformIcon } from "@/components/dashboard/PlatformIcon";
 import { VideoThumbnail } from "@/components/dashboard/VideoThumbnail";
 import { useToast } from "@/components/dashboard/ToastContext";
+import { useAuthGateOptional } from "@/components/dashboard/AuthGateProvider";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 import { formatMetricCount } from "@/lib/format-metrics";
 import { SKELETON_CARD_CLASS } from "@/components/dashboard/DashboardSkeletons";
@@ -140,6 +141,7 @@ type CompetitorSpySectionProps = {
 
 export function CompetitorSpySection({ onVideoClick, active = true }: CompetitorSpySectionProps) {
   const { showToast } = useToast();
+  const authGate = useAuthGateOptional();
   const [competitors, setCompetitors] = useState<CompetitorAccount[]>([]);
   const [videos, setVideos] = useState<CompetitorVideoRow[]>([]);
   const [competitorMode, setCompetitorMode] = useState<CompetitorMode>("latest");
@@ -312,6 +314,7 @@ export function CompetitorSpySection({ onVideoClick, active = true }: Competitor
   }, [active]);
 
   async function onAddCompetitor() {
+    if (authGate && !authGate.ensureRegistered("competitor", () => onAddCompetitor())) return;
     const detected = detectCompetitorPlatform(competitorInput);
     if (!detected.platform || !detected.username) {
       setFormError(
@@ -456,6 +459,11 @@ export function CompetitorSpySection({ onVideoClick, active = true }: Competitor
         <button
           type="button"
           onClick={() => {
+            if (authGate && !authGate.ensureRegistered("competitor", () => {
+              setAddModalOpen(true);
+              setFormError(null);
+              setAddNotice(null);
+            })) return;
             setAddModalOpen(true);
             setFormError(null);
             setAddNotice(null);

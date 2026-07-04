@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GridVideo } from "@/lib/mock-data";
 import type { FeedPlatformMode } from "@/lib/search-query";
 import { uiLocaleToApi, uiPeriodToApi } from "@/lib/search-query";
+import { useAuthGateOptional } from "@/components/dashboard/AuthGateProvider";
 import { SearchToolbar } from "@/components/dashboard/SearchToolbar";
 import type { SearchFiltersPayload, SearchSubmitPayload } from "@/components/dashboard/SearchToolbar";
 import type { SearchGridFilters } from "@/components/dashboard/search-results-utils";
@@ -46,6 +47,7 @@ type FeedSession = {
 
 export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: SearchResultsSectionProps) {
   const { showToast } = useToast();
+  const authGate = useAuthGateOptional();
   const { hydrateForVideos, lastError, clearError } = useSavedVideos();
   const ssrVideos = useMemo(
     () => filterAndResolveDisplayableVideos(initialHome.homeVideos),
@@ -191,6 +193,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
   async function runSearch(payload: SearchSubmitPayload) {
     const q = payload.q.trim();
     if (!q) return;
+    if (authGate && !authGate.ensureRegistered("search", () => runSearch(payload))) return;
 
     setSearchLoading(true);
     setError(null);
@@ -256,6 +259,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
 
   async function loadMore() {
     if (!session || searchLoading || loadMoreLoading) return;
+    if (authGate && !authGate.ensureRegistered("load_more", () => loadMore())) return;
     setLoadMoreLoading(true);
     setError(null);
     try {

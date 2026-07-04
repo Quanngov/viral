@@ -3,8 +3,9 @@
 import { FilePenLine } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAuthDisplay } from "@/hooks/use-auth-display";
+import { useAuthGate } from "@/components/dashboard/AuthGateProvider";
 import { AccountPanel, type AccountPanelTab } from "@/components/dashboard/AccountPanel";
-import { AuthModal, type AuthModalMode } from "@/components/dashboard/AuthModal";
+import type { AuthModalMode } from "@/components/dashboard/AuthModal";
 import { MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
 import { useCountUp } from "@/hooks/use-count-up";
 import { formatTokensRuSpace } from "@/lib/format-metrics";
@@ -84,16 +85,12 @@ const accountModals = (
     accountPanelTab: AccountPanelTab;
     setAccountPanelTab: (tab: AccountPanelTab) => void;
     setAccountPanelOpen: (open: boolean) => void;
-    authOpen: boolean;
-    authMode: AuthModalMode;
-    setAuthOpen: (open: boolean) => void;
     serviceMenuOpen: boolean;
     setServiceMenuOpen: (open: boolean) => void;
-    setAuthMode: (mode: AuthModalMode) => void;
-    onAuthSuccess: () => void;
     showAuthed: boolean;
     displayEmail: string;
     displayTokens: number;
+    onLogout: () => void;
   },
 ) => (
   <>
@@ -106,19 +103,9 @@ const accountModals = (
         email={props.displayEmail}
         plan="Pro"
         balanceTokens={props.displayTokens}
-        onLogout={() => {
-          props.setAccountPanelOpen(false);
-          props.setAuthMode("logout");
-          props.setAuthOpen(true);
-        }}
+        onLogout={props.onLogout}
       />
     ) : null}
-    <AuthModal
-      open={props.authOpen}
-      onClose={() => props.setAuthOpen(false)}
-      mode={props.authMode}
-      onSuccess={props.onAuthSuccess}
-    />
     <MockSimpleInfoModal
       open={props.serviceMenuOpen}
       onClose={() => props.setServiceMenuOpen(false)}
@@ -131,10 +118,9 @@ const accountModals = (
 export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: UserPanelProps) {
   const { showAuthed, showGuest, showAuthPlaceholder, sessionLoading, displayEmail } =
     useAuthDisplay();
+  const { openAuth } = useAuthGate();
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
   const [accountPanelTab, setAccountPanelTab] = useState<AccountPanelTab>("profile");
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<AuthModalMode>("login");
   const [serviceMenuOpen, setServiceMenuOpen] = useState(false);
   const [balance, setBalance] = useState(0);
   const [balanceLoaded, setBalanceLoaded] = useState(false);
@@ -168,23 +154,22 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
     return () => window.removeEventListener("viral:tokens-updated", onTokensUpdated);
   }, []);
 
-  const onAuthSuccess = useCallback(() => {
+  useEffect(() => {
+    if (!showAuthed || sessionLoading) return;
     void refreshBalance();
-  }, [refreshBalance]);
+  }, [showAuthed, sessionLoading, displayEmail, refreshBalance]);
 
   const openAccountPanel = (tab: AccountPanelTab) => {
     if (!showAuthed) {
-      setAuthMode("login");
-      setAuthOpen(true);
+      openAuth("login");
       return;
     }
     setAccountPanelTab(tab);
     setAccountPanelOpen(true);
   };
 
-  const openAuth = (mode: AuthModalMode) => {
-    setAuthMode(mode);
-    setAuthOpen(true);
+  const openAuthModal = (mode: AuthModalMode) => {
+    openAuth(mode);
   };
 
   const displayTokens = useCountUp(balance, {
@@ -197,16 +182,15 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
     accountPanelTab,
     setAccountPanelTab,
     setAccountPanelOpen,
-    authOpen,
-    authMode,
-    setAuthOpen,
     serviceMenuOpen,
     setServiceMenuOpen,
-    setAuthMode,
-    onAuthSuccess,
     showAuthed,
     displayEmail,
     displayTokens,
+    onLogout: () => {
+      setAccountPanelOpen(false);
+      openAuth("logout");
+    },
   };
 
   const authPlaceholder = (
@@ -220,14 +204,14 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
     <div className="dashboard-fade-in mb-2 hidden flex-row gap-2 lg:flex">
       <button
         type="button"
-        onClick={() => openAuth("login")}
+        onClick={() => openAuthModal("login")}
         className="dashboard-ease flex-1 rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
       >
         Войти
       </button>
       <button
         type="button"
-        onClick={() => openAuth("signup")}
+        onClick={() => openAuthModal("signup")}
         className="dashboard-ease flex-1 rounded-lg border border-zinc-200 bg-white py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
       >
         Регистрация

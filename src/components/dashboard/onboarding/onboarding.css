@@ -1,0 +1,66 @@
+.onboarding-backdrop {
+  animation: onboarding-fade-in 0.18s ease-out both;
+}
+
+.onboarding-panel {
+  animation: onboarding-panel-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.onboarding-step {
+  animation: onboarding-step-in 0.16s ease-out both;
+}
+
+@keyframes onboarding-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes onboarding-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes onboarding-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-backdrop,
+  .onboarding-panel,
+  .onboarding-step {
+    animation: none;
+  }
+}
+
+.onboarding-workspace section {
+  transition: border-color 0.15s ease;
+}
+
+.onboarding-signup ul li {
+  animation: onboarding-step-in 0.2s ease-out both;
+}
+
+.onboarding-signup ul li:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.onboarding-signup ul li:nth-child(3) {
+  animation-delay: 80ms;
+}
