@@ -23,7 +23,10 @@ export class DeepSeekError extends Error {
   }
 }
 
-export async function deepseekChatCompletion(messages: DeepSeekChatMessage[]): Promise<{
+export async function deepseekChatCompletion(
+  messages: DeepSeekChatMessage[],
+  options?: { temperature?: number; max_tokens?: number },
+): Promise<{
   text: string;
   promptTokens?: number;
   completionTokens?: number;
@@ -47,8 +50,8 @@ export async function deepseekChatCompletion(messages: DeepSeekChatMessage[]): P
       body: JSON.stringify({
         model,
         messages,
-        temperature: 0.55,
-        max_tokens: 1800,
+        temperature: options?.temperature ?? 0.55,
+        max_tokens: options?.max_tokens ?? 1800,
       }),
       signal: controller.signal,
     });

@@ -10,7 +10,6 @@ import { PlatformPreviewSection } from "@/components/landing/PlatformPreviewSect
 import { PricingTeaserSection } from "@/components/landing/PricingTeaserSection";
 import { SearchExamplesSection } from "@/components/landing/SearchExamplesSection";
 import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
-import { WorkflowSection } from "@/components/landing/WorkflowSection";
 
 type LandingPageProps = {
   marqueeVideos: LandingMarqueeVideo[];
@@ -25,7 +24,6 @@ export function LandingPage({ marqueeVideos }: LandingPageProps) {
         <FeaturesSection />
         <SearchExamplesSection />
         <PlatformPreviewSection />
-        <WorkflowSection />
         <DataStatsSection />
         <BenefitsSection />
         <TestimonialsSection />

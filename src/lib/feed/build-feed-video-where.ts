@@ -1,5 +1,24 @@
 import type { Prisma } from "@prisma/client";
 import type { PeriodApi, FeedPlatformMode } from "@/lib/search-query";
+import { DISPLAYABLE_THUMBNAIL_VIDEO_WHERE } from "@/lib/thumbnail-pipeline";
+
+function textFieldContains(term: string): Prisma.StringFilter {
+  return { contains: term, mode: "insensitive" };
+}
+
+function termOrClause(term: string): Prisma.VideoWhereInput {
+  return {
+    OR: [
+      { title: textFieldContains(term) },
+      { description: textFieldContains(term) },
+      { sourceQuery: textFieldContains(term) },
+      { channelTitle: textFieldContains(term) },
+      { authorUsername: textFieldContains(term) },
+      { authorDisplayName: textFieldContains(term) },
+      { niche: textFieldContains(term) },
+    ],
+  };
+}
 
 function startUtcDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
@@ -44,7 +63,7 @@ export function buildFeedVideoPrismaWhere(args: {
   period: PeriodApi;
   now: Date;
 }): Prisma.VideoWhereInput {
-  const parts: Prisma.VideoWhereInput[] = [];
+  const parts: Prisma.VideoWhereInput[] = [DISPLAYABLE_THUMBNAIL_VIDEO_WHERE];
   if (args.platform !== "all") {
     parts.push({ platform: args.platform });
   }
@@ -55,16 +74,38 @@ export function buildFeedVideoPrismaWhere(args: {
   }
   const qt = args.q.trim();
   if (qt) {
-    parts.push({
-      OR: [
-        { title: { contains: qt } },
-        { description: { contains: qt } },
-        { sourceQuery: { contains: qt } },
-        { channelTitle: { contains: qt } },
-        { authorUsername: { contains: qt } },
-        { authorDisplayName: { contains: qt } },
-      ],
-    });
+    parts.push(termOrClause(qt));
   }
-  return parts.length === 1 ? parts[0]! : { AND: parts };
+  return { AND: parts };
+}
+
+/** Word-level search: match all terms (AND) or any term (OR). */
+export function buildFeedVideoPrismaWhereForTerms(args: {
+  terms: string[];
+  matchMode: "all" | "any";
+  platform: FeedPlatformMode;
+  minViews: number;
+  period: PeriodApi;
+  now: Date;
+}): Prisma.VideoWhereInput {
+  const parts: Prisma.VideoWhereInput[] = [DISPLAYABLE_THUMBNAIL_VIDEO_WHERE];
+  if (args.platform !== "all") {
+    parts.push({ platform: args.platform });
+  }
+  parts.push({ views: { gte: args.minViews } });
+  const pub = publishedAtFilterForPeriod(args.period, args.now);
+  if (pub) {
+    parts.push({ publishedAt: pub });
+  }
+
+  const terms = args.terms.map((t) => t.trim()).filter((t) => t.length >= 2);
+  if (terms.length > 0) {
+    if (args.matchMode === "all") {
+      parts.push({ AND: terms.map((t) => termOrClause(t)) });
+    } else {
+      parts.push({ OR: terms.flatMap((t) => termOrClause(t).OR ?? []) });
+    }
+  }
+
+  return { AND: parts };
 }

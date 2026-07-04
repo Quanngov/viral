@@ -10,19 +10,24 @@ import { computeFeedVideoStats } from "@/lib/feed/feed-log-stats";
 import { ingestYouTubeShortsForQuery } from "@/lib/feed/ingest-youtube";
 import { upsertInstagramReelsFromTikHub } from "@/lib/feed/ingest-instagram";
 import { searchInstagramReelsTikHub } from "@/lib/providers/tikhubInstagram";
+import { SEARCH_BATCH, searchLocalVideos, SEARCH_EXPANSION_PERIOD } from "@/lib/feed/search-local";
 import { pickFeedBatch } from "@/lib/smart-mix";
+import { rankVideosForSearch } from "@/lib/search-ranking";
+import { optimizeSearchQuery, tokenizeSearchQuery } from "@/lib/search-query-optimizer";
 import { getActionTokenCost } from "@/lib/billing/billing.config";
 import { ensureSessionUser, spendTokens } from "@/lib/token-wallet";
 import { videoToClientJson } from "@/lib/serialize-video";
-import { sortVideosList } from "@/lib/video-sort";
 import { videoClientId } from "@/lib/video-client-id";
 import { throttledDetectTrends } from "@/lib/trends/throttled-detector";
 import { canMakeExternalSearch, markExternalSearchMade } from "@/lib/search-throttle";
-import type { ApiSort, PeriodApi } from "@/lib/search-query";
+import type { ApiSort, FeedPlatformMode, PeriodApi } from "@/lib/search-query";
+import { filterVideosWithDisplayableThumbnail } from "@/lib/thumbnail-pipeline";
+import { fillDisplayableFromPool } from "@/lib/grid-video-display";
+import { hasResolvableThumbnail } from "@/lib/video-thumbnail";
 
 export const dynamic = "force-dynamic";
 
-const BATCH = 8;
+const BATCH = SEARCH_BATCH;
 const THRESH_MORE = 14;
 
 type Body = {
@@ -39,7 +44,15 @@ type Body = {
   language?: string;
 };
 
-function parsePlatform(p: string | undefined): FeedFilterPayload["platform"] {
+type PickRound = {
+  picked: Video[];
+  unseenCount: number;
+  rowsDb: number;
+  matchingCount: number;
+  unseenInstagramInPool: number;
+};
+
+function parsePlatform(p: string | undefined): FeedPlatformMode {
   if (p === "youtube" || p === "instagram" || p === "all") return p;
   return "all";
 }
@@ -63,7 +76,64 @@ function parsePeriod(s: string | undefined): PeriodApi {
   return "month";
 }
 
-async function loadAndPick(args: {
+type ExternalProvider = "youtube" | "instagram";
+
+function pickExternalProvider(platform: FeedPlatformMode): ExternalProvider | null {
+  const ytKey = Boolean(process.env.YOUTUBE_API_KEY?.trim());
+  if (platform === "youtube") return ytKey ? "youtube" : null;
+  if (platform === "instagram") return "instagram";
+  if (ytKey) return "youtube";
+  return "instagram";
+}
+
+async function runOneExternalSearch(args: {
+  provider: ExternalProvider;
+  q: string;
+  region: string;
+  language: string;
+  period: PeriodApi;
+  sort: ApiSort;
+  minViews: number;
+  sessionKey: string;
+  userId: string;
+}): Promise<{ saved: number; reelsFound?: number }> {
+  if (args.provider === "youtube") {
+    const apiKey = process.env.YOUTUBE_API_KEY?.trim();
+    if (!apiKey) return { saved: 0 };
+    const res = await ingestYouTubeShortsForQuery({
+      q: args.q,
+      apiKey,
+      region: args.region,
+      language: args.language,
+      period: args.period,
+      sort: args.sort,
+      minViews: args.minViews,
+    });
+    return { saved: res.saved };
+  }
+
+  try {
+    const ig = await searchInstagramReelsTikHub(args.q);
+    if (!ig.reels.length) return { saved: 0, reelsFound: 0 };
+    const n = await upsertInstagramReelsFromTikHub(ig.reels, args.q, ig.cacheUrl);
+    return { saved: n, reelsFound: ig.reels.length };
+  } catch (e) {
+    await logAdminEvent({
+      level: "error",
+      type: "error",
+      message: "Instagram upsert pipeline",
+      sessionId: args.sessionKey,
+      userId: args.userId,
+      meta: safeMeta({
+        provider: "tikhub_instagram",
+        error: e instanceof Error ? { name: e.name, message: e.message } : String(e),
+      }),
+    });
+    return { saved: 0, reelsFound: 0 };
+  }
+}
+
+async function loadAndPickMore(args: {
   prismaWhere: Prisma.VideoWhereInput;
   filters: FeedFilterPayload;
   sort: ApiSort;
@@ -71,29 +141,23 @@ async function loadAndPick(args: {
   batchIndex: number;
   mixSeed: string;
   now: Date;
-  mixMode: "search" | "more";
-}): Promise<{
-  picked: Video[];
-  unseenCount: number;
-  rowsDb: number;
-  matchingCount: number;
-  unseenInstagramInPool: number;
-}> {
+  searchQuery: string;
+}): Promise<PickRound> {
   const rows = await prisma.video.findMany({
     where: args.prismaWhere,
-    orderBy: [{ rating: "desc" }, { score: "desc" }, { views: "desc" }],
-    take: 800,
+    orderBy: [{ viralScore: "desc" }, { views: "desc" }, { rating: "desc" }],
+    take: 900,
   });
 
   const matching = rows.filter((v) => videoMatchesFeedFilters(v, args.filters, args.now));
   const unseen = matching.filter((v) => !args.seen.has(videoClientId(v.platform, v.externalId)));
-  const sortedPool = sortVideosList(unseen, args.sort) as Video[];
+  const ranked = rankVideosForSearch(unseen, args.searchQuery, args.sort, args.now);
 
   const picked: Video[] = [];
   let batchIdx = args.batchIndex;
   while (picked.length < BATCH && batchIdx < args.batchIndex + 12) {
-    const batch = pickFeedBatch(sortedPool, batchIdx, BATCH, {
-      mode: args.mixMode,
+    const batch = pickFeedBatch(ranked, batchIdx, BATCH, {
+      mode: "more",
       now: args.now,
       platformFilter: args.filters.platform,
       minViewsFloor: args.filters.minViews,
@@ -118,6 +182,14 @@ async function loadAndPick(args: {
   };
 }
 
+function serializePicked(picked: Video[]) {
+  const displayable = filterVideosWithDisplayableThumbnail(picked);
+  const asGrid = displayable.map(videoToClientJson);
+  return fillDisplayableFromPool(asGrid, BATCH, (v) =>
+    hasResolvableThumbnail(v.platform, v.externalId ?? v.youtubeId, v.thumbnailUrl, v.id),
+  );
+}
+
 export async function POST(req: Request) {
   let body: Body = {};
   let feedUserHint: string | undefined;
@@ -128,31 +200,60 @@ export async function POST(req: Request) {
   }
 
   const action = body.action === "more" ? "more" : "search";
-  const q = (body.q ?? "").trim();
-  if (!q) {
+  const userQuery = (body.q ?? "").trim();
+  if (!userQuery) {
     return NextResponse.json({ error: "bad_request", message: "q обязателен" }, { status: 400 });
   }
 
   const { userId, sessionKey } = await ensureSessionUser();
-  const cost =
-    action === "more" ? getActionTokenCost("LOAD_MORE") : getActionTokenCost("SEARCH");
+  const cost = action === "more" ? getActionTokenCost("LOAD_MORE") : getActionTokenCost("SEARCH");
 
-  // Record search query log
-  if (q && q.length <= 120) {
-    const normalizedQuery = q.toLowerCase().replace(/\s+/g, " ").trim();
+  const platform = parsePlatform(body.platform);
+  const period = parsePeriod(body.period);
+  const sort = parseSort(body.sort);
+  const minViewsRaw = Number(body.minViews ?? 0);
+  const minViews = Number.isFinite(minViewsRaw) ? Math.max(0, Math.floor(minViewsRaw)) : 0;
+  const languageMode = body.languageMode === "ru" || body.languageMode === "en" ? body.languageMode : "world";
+  const region = (body.region ?? "").trim();
+  const language = (body.language ?? "").trim();
+
+  const seen = new Set((body.seenIds ?? []).filter(Boolean));
+  const batchIndex = Math.max(0, Math.floor(Number(body.batchIndex) || 0));
+  const now = new Date();
+
+  let optimized = await optimizeSearchQuery(userQuery);
+  if (action === "more") {
+    optimized = {
+      userQuery,
+      optimizedQuery: userQuery,
+      terms: tokenizeSearchQuery(userQuery),
+      relatedTerms: tokenizeSearchQuery(userQuery),
+      source: "fallback",
+    };
+  }
+
+  const filters: FeedFilterPayload = {
+    q: optimized.optimizedQuery,
+    period,
+    minViews,
+    languageMode,
+    platform,
+  };
+
+  if (userQuery.length <= 120) {
+    const normalizedQuery = userQuery.toLowerCase().replace(/\s+/g, " ").trim();
     if (normalizedQuery) {
       try {
         await prisma.searchQueryLog.create({
           data: {
             userId,
-            query: q,
+            query: userQuery,
             normalizedQuery,
             action,
             platform: body.platform || null,
           },
         });
       } catch (e) {
-        // Log but don't fail the request
         await logAdminEvent({
           level: "warn",
           type: "search_log_error",
@@ -165,27 +266,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const platform = parsePlatform(body.platform);
-  const period = parsePeriod(body.period);
-  const sort = parseSort(body.sort);
-  const minViewsRaw = Number(body.minViews ?? 0);
-  const minViews = Number.isFinite(minViewsRaw) ? Math.max(0, Math.floor(minViewsRaw)) : 0;
-  const languageMode = body.languageMode === "ru" || body.languageMode === "en" ? body.languageMode : "world";
-  const region = (body.region ?? "").trim();
-  const language = (body.language ?? "").trim();
-
-  const filters: FeedFilterPayload = {
-    q,
-    period,
-    minViews,
-    languageMode,
-    platform,
-  };
-
-  const seen = new Set((body.seenIds ?? []).filter(Boolean));
-  const batchIndex = Math.max(0, Math.floor(Number(body.batchIndex) || 0));
-  const now = new Date();
-
   await logAdminEvent({
     level: "info",
     type: action === "more" ? "feed_more" : "feed_search",
@@ -194,7 +274,9 @@ export async function POST(req: Request) {
     userId,
     meta: safeMeta({
       action,
-      q,
+      userQuery,
+      optimizedQuery: optimized.optimizedQuery,
+      optimizerSource: optimized.source,
       platform,
       period,
       sort,
@@ -206,27 +288,38 @@ export async function POST(req: Request) {
     }),
   });
 
+  let round: PickRound & { tierUsed?: string };
 
-  const prismaWhere = buildFeedVideoPrismaWhere({
-    q,
-    platform,
-    minViews,
-    period,
-    now,
-  });
-
-  const mixSeed = `${q}|${platform}|${sort}`;
-
-  let round = await loadAndPick({
-    prismaWhere,
-    filters,
-    sort,
-    seen,
-    batchIndex,
-    mixSeed,
-    now,
-    mixMode: action === "more" ? "more" : "search",
-  });
+  if (action === "search") {
+    round = await searchLocalVideos({
+      optimizedQuery: optimized.optimizedQuery,
+      terms: optimized.terms,
+      relatedTerms: optimized.relatedTerms,
+      filters,
+      sort,
+      seen,
+      now,
+      limit: BATCH,
+    });
+  } else {
+    const prismaWhere = buildFeedVideoPrismaWhere({
+      q: optimized.optimizedQuery,
+      platform,
+      minViews,
+      period,
+      now,
+    });
+    round = await loadAndPickMore({
+      prismaWhere,
+      filters,
+      sort,
+      seen,
+      batchIndex,
+      mixSeed: `${optimized.optimizedQuery}|${platform}|${sort}`,
+      now,
+      searchQuery: optimized.optimizedQuery,
+    });
+  }
 
   await logAdminEvent({
     level: "info",
@@ -240,23 +333,16 @@ export async function POST(req: Request) {
       unseenCount: round.unseenCount,
       unseenInstagramInPool: round.unseenInstagramInPool,
       pickedCount: round.picked.length,
+      tierUsed: "tierUsed" in round ? round.tierUsed : undefined,
     }),
   });
 
   const lowPool = round.unseenCount < THRESH_MORE;
-  const canExternalSearch = await canMakeExternalSearch(q);
-  
-  // Для action === "search": делаем внешний добор если мало роликов и можно по throttle
-  // Для action === "more": как раньше, только при lowPool и с токенами
-  const wantYt = Boolean(process.env.YOUTUBE_API_KEY?.trim()) && (
-    (action === "search" && platform !== "instagram" && round.picked.length < 8 && canExternalSearch) ||
-    (action === "more" && platform !== "instagram" && lowPool)
-  );
-  
-  const wantIg = (
-    (action === "search" && platform !== "youtube" && round.picked.length < 8 && canExternalSearch) ||
-    (action === "more" && platform !== "youtube" && (lowPool || (platform === "all" && round.unseenInstagramInPool === 0)))
-  );
+  const canExternal = await canMakeExternalSearch(optimized.optimizedQuery);
+
+  const wantExternal =
+    (action === "search" && round.picked.length < BATCH && canExternal) ||
+    (action === "more" && lowPool && canExternal);
 
   const spendReason = action === "more" ? "feed_show_more" : "feed_search";
   const spend = await spendTokens(userId, cost, spendReason, { sessionId: sessionKey });
@@ -273,107 +359,96 @@ export async function POST(req: Request) {
     );
   }
 
-  if ((action === "search" || action === "more") && (wantYt || wantIg)) {
-    await logAdminEvent({
-      level: "info",
-      type: "api_fetch",
-      message: "Добор через внешние API",
-      sessionId: sessionKey,
-      userId,
-      meta: safeMeta({ wantYoutube: wantYt, wantTikHubInstagram: wantIg, q }),
-    });
+  let externalRan = false;
+  if (wantExternal) {
+    const provider = pickExternalProvider(platform);
+    if (provider) {
+      externalRan = true;
+      await logAdminEvent({
+        level: "info",
+        type: "api_fetch",
+        message: "Один внешний поиск",
+        sessionId: sessionKey,
+        userId,
+        meta: safeMeta({ provider, q: optimized.optimizedQuery }),
+      });
 
-    const ytKey = process.env.YOUTUBE_API_KEY?.trim();
-    const ytPromise =
-      wantYt && ytKey
-        ? ingestYouTubeShortsForQuery({
-            q,
-            apiKey: ytKey,
-            region,
-            language,
-            period,
-            sort,
-            minViews,
-          })
-        : Promise.resolve({ saved: 0 });
+      const externalPeriod = action === "search" ? SEARCH_EXPANSION_PERIOD : period;
 
-    const igPromise = wantIg
-      ? (async () => {
-          try {
-            const ig = await searchInstagramReelsTikHub(q);
-            if (!ig.reels.length) return { saved: 0, reelsFound: 0 };
-            const n = await upsertInstagramReelsFromTikHub(ig.reels, q, ig.cacheUrl);
-            return { saved: n, reelsFound: ig.reels.length };
-          } catch (e) {
-            await logAdminEvent({
-              level: "error",
-              type: "error",
-              message: "Instagram upsert pipeline",
-              sessionId: sessionKey,
-              userId,
-              meta: safeMeta({
-                provider: "tikhub_instagram",
-                error: e instanceof Error ? { name: e.name, message: e.message } : String(e),
-              }),
-            });
-            if (e instanceof Error && e.name === "AbortError") {
-              feedUserHint = USER_MSG.tikhubTimeout;
-            }
-            return { saved: 0, reelsFound: 0 };
-          }
-        })()
-      : Promise.resolve({ saved: 0, reelsFound: 0 });
+      const ext = await runOneExternalSearch({
+        provider,
+        q: optimized.optimizedQuery,
+        region,
+        language,
+        period: externalPeriod,
+        sort,
+        minViews,
+        sessionKey,
+        userId,
+      });
 
-    const [ytRes, igRes] = await Promise.all([ytPromise, igPromise]);
-    const ytSaved = "saved" in ytRes ? ytRes.saved : 0;
-    const igSaved = igRes.saved;
+      if (action === "search" && ext.saved > 0) {
+        await markExternalSearchMade(optimized.optimizedQuery);
+      }
 
-    if (action === "search" && ytSaved + igSaved > 0) {
-      await markExternalSearchMade(q);
+      await logAdminEvent({
+        level: "info",
+        type: "upsert",
+        message: "После внешнего поиска",
+        sessionId: sessionKey,
+        userId,
+        meta: safeMeta({ provider, saved: ext.saved, reelsFound: ext.reelsFound ?? 0 }),
+      });
+
+      if (action === "search") {
+        round = await searchLocalVideos({
+          optimizedQuery: optimized.optimizedQuery,
+          terms: optimized.terms,
+          relatedTerms: optimized.relatedTerms,
+          filters,
+          sort,
+          seen,
+          now,
+          limit: BATCH,
+        });
+      } else {
+        const prismaWhere = buildFeedVideoPrismaWhere({
+          q: optimized.optimizedQuery,
+          platform,
+          minViews,
+          period,
+          now,
+        });
+        round = await loadAndPickMore({
+          prismaWhere,
+          filters,
+          sort,
+          seen,
+          batchIndex,
+          mixSeed: `${optimized.optimizedQuery}|${platform}|${sort}`,
+          now,
+          searchQuery: optimized.optimizedQuery,
+        });
+      }
+
+      await logAdminEvent({
+        level: "info",
+        type: action === "more" ? "feed_more" : "feed_search",
+        message: `Кандидаты после внешнего поиска (${action})`,
+        sessionId: sessionKey,
+        userId,
+        meta: safeMeta({
+          rowsDb: round.rowsDb,
+          matchingCount: round.matchingCount,
+          unseenCount: round.unseenCount,
+          pickedCount: round.picked.length,
+        }),
+      });
     }
-
-    await logAdminEvent({
-      level: "info",
-      type: "upsert",
-      message: "После добора: upsert",
-      sessionId: sessionKey,
-      userId,
-      meta: safeMeta({
-        youtubeSaved: ytSaved,
-        instagramSaved: igSaved,
-        instagramReelsFetched: "reelsFound" in igRes ? igRes.reelsFound : 0,
-      }),
-    });
-
-    round = await loadAndPick({
-      prismaWhere,
-      filters,
-      sort,
-      seen,
-      batchIndex,
-      mixSeed,
-      now,
-      mixMode: action === "more" ? "more" : "search",
-    });
-
-    await logAdminEvent({
-      level: "info",
-      type: action === "more" ? "feed_more" : "feed_search",
-      message: `Кандидаты после добора (${action})`,
-      sessionId: sessionKey,
-      userId,
-      meta: safeMeta({
-        rowsDb: round.rowsDb,
-        matchingCount: round.matchingCount,
-        unseenCount: round.unseenCount,
-        unseenInstagramInPool: round.unseenInstagramInPool,
-        pickedCount: round.picked.length,
-      }),
-    });
   }
 
-  const picked = round.picked;
-  const pickedStats = computeFeedVideoStats(picked, now);
+  const clientVideos = serializePicked(round.picked);
+  const pickedStats = computeFeedVideoStats(round.picked, now);
 
   await logAdminEvent({
     level: "info",
@@ -382,7 +457,7 @@ export async function POST(req: Request) {
     sessionId: sessionKey,
     userId,
     meta: safeMeta({
-      delivered: picked.length,
+      delivered: clientVideos.length,
       platformBreakdown: { youtube: pickedStats.youtube, instagram: pickedStats.instagram },
       ageBreakdown: {
         upTo7d: pickedStats.ageLe7,
@@ -392,16 +467,14 @@ export async function POST(req: Request) {
     }),
   });
 
-  const noMore = picked.length === 0 && action === "more";
+  const noMore = clientVideos.length === 0 && action === "more";
 
-  // Устанавливаем userHint если мало роликов
-  if (action === "search" && picked.length < 4 && !feedUserHint) {
-    feedUserHint = "Найдено мало роликов. Попробуйте изменить запрос или фильтры";
+  if (action === "search" && clientVideos.length < BATCH && !feedUserHint) {
+    feedUserHint =
+      "Найдено меньше роликов, чем запрошено. Попробуйте расширить период или изменить фильтры.";
   }
 
-  // Запускаем детектор трендов в фоне если были добавлены новые ролики
-  if ((action === "search" || action === "more") && (wantYt || wantIg)) {
-    // Не ждем результат, запускаем в фоне
+  if (externalRan) {
     throttledDetectTrends(action === "search" ? "feed_search" : "feed_more").catch((error) => {
       console.error("Background trend detection failed:", error);
     });
@@ -410,7 +483,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     tokensOk: true,
     tokensRemaining: spend.balance,
-    videos: picked.map(videoToClientJson),
+    videos: clientVideos,
     noMore,
     userHint: feedUserHint,
   });

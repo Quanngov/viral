@@ -1,10 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import {
-  formatDailyVideosAnalyzedCount,
-  getDailyVideosAnalyzedCount,
-} from "@/components/landing/lib/daily-activity-count";
+import { formatDailyVideosAnalyzedCount } from "@/components/landing/lib/daily-activity-count";
+import { useDailyVideosAnalyzedCount } from "@/components/landing/lib/use-daily-videos-count";
 
 function InstagramIcon() {
   return (
@@ -37,7 +34,7 @@ const PLATFORMS = [
 ] as const;
 
 export function PlatformActivity() {
-  const count = useMemo(() => getDailyVideosAnalyzedCount(), []);
+  const count = useDailyVideosAnalyzedCount();
   const formatted = formatDailyVideosAnalyzedCount(count);
 
   return (

@@ -765,6 +765,46 @@
   display: none;
 }
 
+/* —— Pricing —— */
+.landing-pricing-card--featured {
+  position: relative;
+}
+
+@media (min-width: 768px) {
+  .landing-pricing-card--featured {
+    transform: translateY(-0.25rem);
+  }
+}
+
+.landing-pricing-toggle-btn {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font: inherit;
+}
+
+.landing-pricing-toggle-btn:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 2px;
+}
+
+.landing-pricing-table-feature {
+  min-width: 11rem;
+  background: #fafafa;
+}
+
+.landing-pricing-table thead th {
+  background: #fafafa;
+}
+
+.landing-pricing-table tbody tr:hover {
+  background: #fcfcfc;
+}
+
+.landing-pricing-table-wrap {
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing-marquee,
   .landing-cursor,

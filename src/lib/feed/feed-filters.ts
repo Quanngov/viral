@@ -21,6 +21,8 @@ function textHay(v: Video): string {
   return `${v.title} ${v.description ?? ""} ${v.channelTitle ?? ""} ${v.authorUsername ?? ""} ${v.sourceQuery ?? ""}`.toLowerCase();
 }
 
+import { computeRelevanceScore } from "@/lib/scoring";
+
 export function videoMatchesSearchQuery(v: Video, q: string): boolean {
   const t = q.trim().toLowerCase();
   if (!t) return true;
@@ -28,7 +30,21 @@ export function videoMatchesSearchQuery(v: Video, q: string): boolean {
   if (hay.includes(t)) return true;
   const words = [...new Set(t.split(/\s+/).filter((w) => w.length >= 2))];
   if (words.length === 0) return true;
+  if (words.every((w) => hay.includes(w))) return true;
   return words.some((w) => hay.includes(w));
+}
+
+/** Stricter relevance gate for feed (uses scoring helper). */
+export function videoMeetsSearchRelevance(v: Video, q: string, minScore = 0.12): boolean {
+  const query = q.trim();
+  if (!query) return true;
+  const score = computeRelevanceScore(
+    query,
+    v.title,
+    v.description ?? "",
+    `${v.channelTitle ?? ""} ${v.authorDisplayName ?? ""}`,
+  );
+  return score >= minScore;
 }
 
 export function videoMatchesLanguage(v: Video, mode: FeedLanguageMode): boolean {

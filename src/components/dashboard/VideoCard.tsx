@@ -141,7 +141,7 @@ export function VideoCard({
       onClick={onOpen}
       className="dashboard-ease group relative block w-full cursor-pointer overflow-hidden rounded-2xl bg-white text-left shadow-sm shadow-zinc-900/5 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-zinc-900/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
     >
-      <div className="relative aspect-[3/4] w-full shrink-0 overflow-hidden bg-zinc-200/80">
+      <div className="relative aspect-[3/4] w-full shrink-0 overflow-hidden bg-zinc-900">
         {thumbSrc && !showIconFallback ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -149,7 +149,7 @@ export function VideoCard({
             alt=""
             onLoad={markReady}
             onError={onThumbError}
-            className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover opacity-100 transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full min-h-full min-w-full scale-[1.04] object-cover object-center opacity-100 transition-transform duration-300 ease-out group-hover:scale-[1.07]"
             loading={priority ? "eager" : "lazy"}
             decoding="async"
             fetchPriority={priority ? "high" : "auto"}
@@ -161,7 +161,7 @@ export function VideoCard({
           <img
             src={VIRAL_THUMBNAIL_PLACEHOLDER}
             alt=""
-            className="pointer-events-none absolute inset-0 z-0 h-full w-full object-contain p-6 opacity-40"
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full min-h-full min-w-full scale-[1.08] object-cover object-center opacity-35"
           />
         ) : null}
 

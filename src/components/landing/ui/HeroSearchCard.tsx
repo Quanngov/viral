@@ -2,29 +2,57 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { LANDING_COPY } from "@/components/landing/copy";
+import {
+  HERO_SEARCH_BETWEEN_QUERIES_MS,
+  HERO_SEARCH_QUERIES,
+  heroSearchCharDelayMs,
+  heroSearchPauseAfterQueryMs,
+} from "@/components/landing/lib/hero-search-queries";
 import { PlatformActivity } from "@/components/landing/ui/PlatformActivity";
 
+type TypingPhase = "typing" | "pause" | "deleting";
+
 export function HeroSearchCard() {
-  const queries = LANDING_COPY.searchExamples.queries;
+  const queries = HERO_SEARCH_QUERIES;
   const [index, setIndex] = useState(0);
   const [charIndex, setCharIndex] = useState(0);
+  const [phase, setPhase] = useState<TypingPhase>("typing");
   const reduceMotion = useReducedMotion();
   const query = queries[index] ?? queries[0];
   const typed = reduceMotion ? query : query.slice(0, charIndex);
 
   useEffect(() => {
     if (reduceMotion) return;
-    if (charIndex < query.length) {
-      const t = window.setTimeout(() => setCharIndex((c) => c + 1), 34);
+
+    if (phase === "typing") {
+      if (charIndex < query.length) {
+        const nextChar = query[charIndex] ?? "";
+        const delay = heroSearchCharDelayMs(nextChar, charIndex);
+        const t = window.setTimeout(() => setCharIndex((c) => c + 1), delay);
+        return () => window.clearTimeout(t);
+      }
+      const t = window.setTimeout(() => setPhase("pause"), heroSearchPauseAfterQueryMs(query));
       return () => window.clearTimeout(t);
     }
-    const pause = window.setTimeout(() => {
-      setIndex((i) => (i + 1) % queries.length);
-      setCharIndex(0);
-    }, 2400);
-    return () => window.clearTimeout(pause);
-  }, [charIndex, query, queries.length, reduceMotion]);
+
+    if (phase === "pause") {
+      const t = window.setTimeout(() => setPhase("deleting"), 180);
+      return () => window.clearTimeout(t);
+    }
+
+    if (phase === "deleting") {
+      if (charIndex > 0) {
+        const delay = charIndex <= 3 ? 22 : 14;
+        const t = window.setTimeout(() => setCharIndex((c) => c - 1), delay);
+        return () => window.clearTimeout(t);
+      }
+      const t = window.setTimeout(() => {
+        setIndex((i) => (i + 1) % queries.length);
+        setPhase("typing");
+      }, HERO_SEARCH_BETWEEN_QUERIES_MS);
+      return () => window.clearTimeout(t);
+    }
+  }, [charIndex, phase, query, queries.length, reduceMotion]);
 
   return (
     <motion.div
@@ -36,7 +64,7 @@ export function HeroSearchCard() {
       <div className="landing-hero-search-input" aria-hidden>
         <p className="min-h-[4.25rem] text-left text-[1.0625rem] font-medium leading-snug text-[#3f3f46] md:min-h-[5rem] md:text-[1.125rem]">
           {typed}
-          {!reduceMotion ? <span className="landing-cursor" /> : null}
+          {!reduceMotion && phase !== "pause" ? <span className="landing-cursor" /> : null}
         </p>
         <div className="mt-5 flex items-center justify-between gap-3 border-t border-[#f4f4f5] pt-4">
           <PlatformActivity />

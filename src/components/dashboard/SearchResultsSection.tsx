@@ -6,7 +6,7 @@ import type { FeedPlatformMode } from "@/lib/search-query";
 import { uiLocaleToApi, uiPeriodToApi } from "@/lib/search-query";
 import { SearchToolbar } from "@/components/dashboard/SearchToolbar";
 import type { SearchFiltersPayload, SearchSubmitPayload } from "@/components/dashboard/SearchToolbar";
-import { applyVideoFilters, type SearchGridFilters } from "@/components/dashboard/search-results-utils";
+import type { SearchGridFilters } from "@/components/dashboard/search-results-utils";
 import { VideoGrid } from "@/components/dashboard/VideoGrid";
 import { VideoGridSkeleton } from "@/components/dashboard/DashboardSkeletons";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
@@ -21,7 +21,16 @@ import {
 import { filterAndResolveDisplayableVideos } from "@/lib/grid-video-display";
 import { useSavedVideos } from "@/components/dashboard/SavedVideosContext";
 import { useToast } from "@/components/dashboard/ToastContext";
+import {
+  LOAD_MORE_PROGRESS_STEPS,
+  SEARCH_PROGRESS_STEPS,
+  SearchProgressPanel,
+  useAnimatedSearchProgress,
+} from "@/components/dashboard/SearchProgressPanel";
 import { messageForHttpStatus, sanitizeClientErrorMessage } from "@/lib/api-user-messages";
+
+const SEARCH_STEP_MS = 720;
+const LOAD_MORE_STEP_MS = 560;
 
 type SearchResultsSectionProps = {
   searchCost: number;
@@ -53,11 +62,17 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
   const [noMore, setNoMore] = useState(false);
   const [appendFrom, setAppendFrom] = useState(0);
   const feedBatchIndexRef = useRef(1);
-  const [searchSteps, setSearchSteps] = useState<{
-    step1: "pending" | "active" | "completed";
-    step2: "pending" | "active" | "completed";
-    step3: "pending" | "active" | "completed";
-  }>({ step1: "pending", step2: "pending", step3: "pending" });
+
+  const { phases: searchPhases, complete: completeSearchProgress } = useAnimatedSearchProgress(
+    searchLoading,
+    SEARCH_PROGRESS_STEPS,
+    SEARCH_STEP_MS,
+  );
+  const { phases: loadMorePhases, complete: completeLoadMoreProgress } = useAnimatedSearchProgress(
+    loadMoreLoading,
+    LOAD_MORE_PROGRESS_STEPS,
+    LOAD_MORE_STEP_MS,
+  );
 
   const [filters, setFilters] = useState<SearchGridFilters>({
     languageMode: "world",
@@ -67,10 +82,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     platformMode: "all",
   });
 
-  const videos = useMemo(
-    () => (session ? applyVideoFilters(sourceVideos, filters) : sourceVideos),
-    [sourceVideos, filters, session],
-  );
+  const videos = useMemo(() => sourceVideos, [sourceVideos]);
 
   useEffect(() => {
     if (sourceVideos.length === 0) return;
@@ -186,23 +198,18 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     setAppendFrom(0);
     setSourceVideos([]);
 
-    // Анимация поиска
-    setSearchSteps({ step1: "active", step2: "pending", step3: "pending" });
-    
-    // Шаг 1 завершается через 200ms
-    setTimeout(() => {
-      setSearchSteps({ step1: "completed", step2: "active", step3: "pending" });
-    }, 200);
-    
-    // Шаг 2 завершается через 1000ms (время на внешние API)
-    setTimeout(() => {
-      setSearchSteps({ step1: "completed", step2: "completed", step3: "active" });
-    }, 1000);
-
     try {
       const { region, language } = uiLocaleToApi(payload.locale);
       const period = uiPeriodToApi(payload.period);
       const languageMode = localeToLanguageMode(payload.locale);
+
+      setFilters({
+        languageMode,
+        sort: payload.sort,
+        period,
+        minViews: payload.minViews as 0 | 1000 | 10000 | 50000 | 100000 | 1000000,
+        platformMode: payload.platform,
+      });
 
       const { res, data } = await postFeed({
         action: "search",
@@ -242,9 +249,8 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     } catch (e) {
       setError(sanitizeClientErrorMessage(e instanceof Error ? e.message : ""));
     } finally {
+      completeSearchProgress();
       setSearchLoading(false);
-      // Завершаем анимацию
-      setSearchSteps({ step1: "completed", step2: "completed", step3: "completed" });
     }
   }
 
@@ -303,6 +309,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
     } catch (e) {
       setError(sanitizeClientErrorMessage(e instanceof Error ? e.message : ""));
     } finally {
+      completeLoadMoreProgress();
       setLoadMoreLoading(false);
     }
   }
@@ -341,7 +348,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
   }, [homeReady]);
 
   const isSearchMode = Boolean(session);
-  const showGridSkeleton = isSearchMode ? searchLoading : !homeReady;
+  const showGridSkeleton = !isSearchMode && !homeReady;
   const displayedVideos = videos;
   const showLoadMore = Boolean(session) && !searchLoading && !loadMoreLoading && homeReady && !noMore;
   const showHomeEmpty = homeReady && !session && displayedVideos.length === 0;
@@ -371,32 +378,11 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
         </p>
       ) : null}
 
-      {/* Анимация поиска */}
-      {searchLoading && (searchSteps.step1 !== "pending" || searchSteps.step2 !== "pending" || searchSteps.step3 !== "pending") ? (
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm shadow-zinc-900/5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-            <span className="text-sm font-medium text-zinc-800">Ищем ролики...</span>
-          </div>
-          
-          <div className="space-y-2">
-            <SearchStep
-              status={searchSteps.step1}
-              text="Проверяем базу"
-            />
-            <SearchStep
-              status={searchSteps.step2}
-              text="Добираем свежие ролики из YouTube и Instagram"
-            />
-            <SearchStep
-              status={searchSteps.step3}
-              text="Собираем выдачу"
-            />
-          </div>
-        </div>
+      {searchLoading ? (
+        <SearchProgressPanel steps={SEARCH_PROGRESS_STEPS} phases={searchPhases} />
       ) : null}
 
-      {homeReady && noMore && session && videos.length === 0 ? (
+      {homeReady && noMore && session && videos.length === 0 && !searchLoading ? (
         <p className="text-sm text-zinc-600">Пока больше роликов нет.</p>
       ) : null}
 
@@ -422,7 +408,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
         <>
           {showGridSkeleton ? (
             <VideoGridSkeleton count={8} />
-          ) : (
+          ) : !searchLoading && (displayedVideos.length > 0 || !session) ? (
             <div
               className={`transition-opacity duration-500 ease-out ${
                 gridFadeIn ? "opacity-100" : "opacity-0"
@@ -430,13 +416,12 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
             >
               <VideoGrid videos={displayedVideos} appendFrom={appendFrom} onVideoClick={onVideoClick} />
             </div>
-          )}
-          {loadMoreLoading ? (
-            <div className="mt-2">
-              <VideoGridSkeleton count={4} />
-            </div>
           ) : null}
-          {showLoadMore ? (
+          {loadMoreLoading ? (
+            <div className="mt-3">
+              <SearchProgressPanel steps={LOAD_MORE_PROGRESS_STEPS} phases={loadMorePhases} compact />
+            </div>
+          ) : showLoadMore ? (
             <div className="mt-1 flex justify-center">
               <button
                 type="button"
@@ -468,29 +453,5 @@ function LightningIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-function SearchStep({ status, text }: { status: "pending" | "active" | "completed"; text: string }) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
-        status === "pending" ? "bg-zinc-300" :
-        status === "active" ? "bg-emerald-500 animate-pulse" :
-        "bg-emerald-600"
-      }`} />
-      <span className={`${
-        status === "pending" ? "text-zinc-500" :
-        status === "active" ? "text-zinc-800 font-medium" :
-        "text-zinc-700"
-      }`}>
-        {text}
-      </span>
-      {status === "completed" ? (
-        <svg className="h-3 w-3 text-emerald-600 ml-auto" fill="currentColor" viewBox="0 0 16 16">
-          <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
-        </svg>
-      ) : null}
-    </div>
   );
 }
