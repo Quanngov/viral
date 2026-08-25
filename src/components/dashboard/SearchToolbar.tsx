@@ -1,9 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ApiSort, FeedPlatformMode } from "@/lib/search-query";
+import { buildPopularQueryPool } from "@/lib/popular-search-queries";
 
 type Popover = "locale" | "filter" | "calendar" | "views" | null;
+
+/** Number of query chips shown (a random subset picked once per page load). */
+const CHIP_COUNT = 6;
+
+// Placeholder typing timing — deliberately calm, no rush.
+const TYPE_START_MS = 600;
+const TYPE_CHAR_MS = 95;
+const PAUSE_FULL_MS = 2600;
+const DELETE_CHAR_MS = 55;
+const PAUSE_NEXT_MS = 700;
+
+/** Random subset of the pool (stable for the lifetime of one page load). */
+function pickRandomChips(pool: string[], count: number): string[] {
+  const copy = [...pool];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, Math.min(count, copy.length));
+}
 
 export type SearchSubmitPayload = {
   q: string;
@@ -19,6 +40,8 @@ export type SearchFiltersPayload = Omit<SearchSubmitPayload, "q">;
 type SearchToolbarProps = {
   searchCost: number;
   searching?: boolean;
+  /** Real popular search queries from the server; empty when not provided. */
+  popularSearchTopics?: string[];
   onSubmitSearch?: (payload: SearchSubmitPayload) => void;
   onFiltersChange?: (payload: SearchFiltersPayload) => void;
 };
@@ -101,6 +124,7 @@ function menuRowClasses(active: boolean) {
 export function SearchToolbar({
   searchCost,
   searching,
+  popularSearchTopics = [],
   onSubmitSearch,
   onFiltersChange,
 }: SearchToolbarProps) {
@@ -112,6 +136,110 @@ export function SearchToolbar({
   const [minViews, setMinViews] = useState<number>(0);
   const platform: FeedPlatformMode = "all";
   const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Shared pool for chips + animated placeholder: real server topics first,
+  // isolated fallback appended so the UI never looks empty.
+  const queryPool = useMemo(
+    () => buildPopularQueryPool(popularSearchTopics),
+    [popularSearchTopics],
+  );
+
+  // Random subset per page load, stable while the page is open. SSR/hydration-safe:
+  // default = first N, then re-pick once on the client after mount.
+  const [chips, setChips] = useState<string[]>(() => queryPool.slice(0, CHIP_COUNT));
+  useEffect(() => {
+    const raf = window.requestAnimationFrame(() => {
+      setChips(pickRandomChips(queryPool, CHIP_COUNT));
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [queryPool]);
+
+  // Single-row chips: render only chips that fully fit the available width
+  // (never clip a chip mid-way); recompute when the set or container resizes.
+  const chipsRef = useRef<HTMLDivElement>(null);
+  const [visibleCount, setVisibleCount] = useState(chips.length);
+  useEffect(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    const compute = () => {
+      const containerRect = el.getBoundingClientRect();
+      let count = 0;
+      for (const child of Array.from(el.children)) {
+        const rect = (child as HTMLElement).getBoundingClientRect();
+        if (rect.right - containerRect.left <= containerRect.width + 0.5) {
+          count += 1;
+        } else {
+          break;
+        }
+      }
+      setVisibleCount(count);
+    };
+    const first = window.requestAnimationFrame(compute);
+    const ro = new ResizeObserver(() => {
+      window.requestAnimationFrame(compute);
+    });
+    ro.observe(el);
+    return () => {
+      window.cancelAnimationFrame(first);
+      ro.disconnect();
+    };
+  }, [chips]);
+
+  // Animated placeholder: types → holds → deletes → next query. Uses an overlay,
+  // never the input value, so user typing is never disturbed.
+  const [typeText, setTypeText] = useState("");
+  useEffect(() => {
+    if (query.length > 0 || queryPool.length === 0) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    let qi = 0;
+    let ci = 0;
+    let phase: "idle" | "type" | "pause" | "delete" = "idle";
+
+    const tick = () => {
+      if (cancelled) return;
+      const current = queryPool[qi % queryPool.length];
+      if (!current) return;
+      if (phase === "idle") {
+        phase = "type";
+        setTypeText("");
+        timer = window.setTimeout(tick, TYPE_START_MS);
+        return;
+      }
+      if (phase === "type") {
+        ci += 1;
+        setTypeText(current.slice(0, ci));
+        if (ci >= current.length) {
+          phase = "pause";
+          timer = window.setTimeout(tick, PAUSE_FULL_MS);
+        } else {
+          timer = window.setTimeout(tick, TYPE_CHAR_MS);
+        }
+        return;
+      }
+      if (phase === "pause") {
+        phase = "delete";
+        timer = window.setTimeout(tick, DELETE_CHAR_MS);
+        return;
+      }
+      ci -= 1;
+      setTypeText(current.slice(0, ci));
+      if (ci <= 0) {
+        qi += 1;
+        phase = "type";
+        timer = window.setTimeout(tick, PAUSE_NEXT_MS);
+      } else {
+        timer = window.setTimeout(tick, DELETE_CHAR_MS);
+      }
+    };
+
+    timer = window.setTimeout(tick, TYPE_START_MS);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [query, queryPool]);
 
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
@@ -148,23 +276,54 @@ export function SearchToolbar({
     });
   }
 
+  /** Insert a suggested query into the existing input (no separate search). */
+  function fillQuery(q: string) {
+    setQuery(q);
+    inputRef.current?.focus();
+  }
+
   return (
-    <div
-      ref={rootRef}
-      className="flex shrink-0 flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm shadow-zinc-900/5 sm:gap-4 sm:p-5"
-    >
-      <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
+    <div ref={rootRef} className="flex w-full flex-col gap-3">
+      <h2 className="mt-4 text-base font-semibold tracking-tight text-zinc-900">Поиск видео</h2>
+
+      {chips.length > 0 ? (
+        <div ref={chipsRef} className="flex w-full flex-nowrap gap-2 overflow-hidden">
+          {chips.map((q, i) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => fillQuery(q)}
+              disabled={searching}
+              className={`shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-50 ${
+                i >= visibleCount ? "invisible" : ""
+              }`}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="flex shrink-0 flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm shadow-zinc-900/5 sm:gap-4 sm:p-5">
+        <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
         <div className="flex w-full min-w-0 gap-2">
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">Поиск по теме</span>
+          {query === "" && !searching && queryPool.length > 0 ? (
+            <span aria-hidden className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm text-zinc-400">
+              <span className="max-w-full truncate">{typeText}</span>
+              <span className="ml-px animate-pulse">▍</span>
+            </span>
+          ) : null}
           <input
+            ref={inputRef}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
-            placeholder="Введите тему, нишу или ключевое слово..."
+            placeholder={queryPool.length > 0 ? "" : "Введите тему, нишу или ключевое слово..."}
             disabled={searching}
             className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 text-sm text-zinc-900 outline-none ring-emerald-500/20 transition-all placeholder:text-zinc-400 focus:border-emerald-400 focus:bg-white focus:ring-4 disabled:opacity-60 lg:h-11"
           />
@@ -319,6 +478,7 @@ export function SearchToolbar({
             ) : null}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

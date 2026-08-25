@@ -363,6 +363,7 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
       <SearchToolbar
         searchCost={searchCost}
         searching={searchLoading}
+        popularSearchTopics={initialHome.popularSearchTopics}
         onSubmitSearch={runSearch}
         onFiltersChange={onFiltersChange}
       />

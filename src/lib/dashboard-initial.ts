@@ -5,6 +5,8 @@ import type { TrendsPayload } from "@/lib/dashboard-fetch";
 export type DashboardInitialPayload = {
   homeVideos: GridVideo[];
   trends: TrendsPayload;
+  /** Real popular search queries (last 14 days) for the search UI chips/placeholder. */
+  popularSearchTopics: string[];
 };
 
 export const HOME_SSR_LIMIT = 8;

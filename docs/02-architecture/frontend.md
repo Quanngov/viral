@@ -69,6 +69,16 @@ HomeDashboard
 - Activity rings, social cards, AI tasks
 - CSS: `dashboard-home-panel.css`
 
+## Video search UI
+
+- `src/components/dashboard/SearchToolbar.tsx` — heading "Поиск видео", popular-query chips, animated placeholder overlay
+- Heading "Поиск видео" vertically aligned (top/baseline) with the sidebar "Тренды в реальном времени"
+- Chips are a **random subset per page load** (not auto-rotating on the page) and stay in **one horizontal row** — only chips that fully fit the width are shown (never clipped mid-way); clicking fills the existing search input
+- Placeholder animation types/holds/erases slowly via an overlay, never the input `value`
+- White card/backing wraps **only** the search input + filters; heading and chips sit outside it
+- `src/lib/popular-search-queries.ts` — isolated fallback pool (audience-focused RU queries) merged with real topics
+- Popular queries injected via SSR `DashboardInitialPayload.popularSearchTopics` (from existing `getPopularSearchTopics` / `SearchQueryLog`)
+
 ## Design system (summary)
 
 From `DESIGN.md`:

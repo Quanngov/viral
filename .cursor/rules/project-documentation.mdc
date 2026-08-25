@@ -22,6 +22,18 @@ Before making significant architectural, backend, database, infrastructure, auth
 5. Do not assume undocumented behavior.
 6. Use the current code as the source of truth for implementation details.
 
+## Mandatory rule
+
+`docs/` is the single source of truth for project documentation and is synchronized with Obsidian.
+
+- Never create separate documentation outside `docs/` if a corresponding document already exists.
+- Do not create duplicate documents — update the existing one.
+- Documentation must reflect the actual implemented state, not plans.
+
+After ANY change that alters behavior, architecture, UI, API, database, integrations, configuration, or fixes a significant bug, update the relevant documentation in `docs/`. This includes new/changed features, UI/UX, API/OAuth/social integrations, Prisma/DB/migrations, architecture, bug fixes, performance, security, env/config, and enabling or disabling functionality.
+
+The canonical universal rule lives in `AGENTS.md` (applies to every model/agent). Keep this file aligned with it.
+
 ## After every completed development task
 
 If the task changes the project:
@@ -35,25 +47,43 @@ If the task changes the project:
 7. Do not invent functionality.
 8. Never write secrets, passwords, API keys, OAuth tokens or private credentials into documentation.
 
+Workflow after each task:
+
+1. Check the changed files.
+2. Determine which documents in `docs/` the change affects.
+3. Update the changelog.
+4. Update the relevant technical documentation if needed.
+5. Check `git diff` and confirm the documentation is actually changed.
+6. Only then report the task as complete.
+
+A task is not fully complete if the code changed but the required documentation was not updated. Do not just say "Documentation should be updated." — actually edit the files in `docs/`.
+
 ## Development log
 
 After every completed task that changes the project, add a short entry to:
 
 docs/09-changelog/development-log.md
 
+This is the single changelog — do not create a second one. Each entry must contain:
+
+- date;
+- what changed;
+- which files/modules are affected;
+- a brief result;
+- the reason, if important.
+
 Format:
 
 ## YYYY-MM-DD — Short title
 
-- Changed: ...
-- Result: ...
-- Notes: ...
+**Files:** `path/to/file.ts`
 
-Maximum 3–5 bullets.
+- What changed
+- Why
+- Result / impact (if any)
 
-Only record meaningful changes.
-Do not list every edited file.
-Do not describe routine commands.
+Do not record minor intermediate actions that do not change the project.
+Never rewrite or delete historical entries.
 
 ## Architecture decisions
 
@@ -100,3 +130,11 @@ Do not modify documentation merely to make it longer.
 Documentation is part of the project.
 
 A completed development task is not considered fully documented until the relevant documentation and development log have been updated.
+
+In the final report always state:
+
+`Documentation updated: <list of changed documents>`
+
+or, if documentation was truly not required:
+
+`Documentation updated: none — no persistent project change.`

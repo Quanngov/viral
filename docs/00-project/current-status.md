@@ -20,6 +20,7 @@
 ### Core dashboard
 
 - **Home / Search** — `POST /api/videos/feed`: выбор из БД + опциональный ingest YouTube Data API и TikHub Instagram
+- **Search UI** — heading "Поиск видео" (aligned with "Тренды в реальном времени"), popular-query chips (random subset per load, no auto-rotation, single row with only fully-fitting chips), slow animated placeholder; popular queries из `SearchQueryLog` (SSR `popularSearchTopics`) + fallback
 - **Saved videos** — `/api/saved-videos`, контекст `SavedVideosProvider`
 - **Competitors** — CRUD `/api/competitors/*`, daily sync, TikHub reels для Instagram
 - **Live trends** — `GET /api/trends/realtime` (poll), `POST /api/trends/lazy-refresh`

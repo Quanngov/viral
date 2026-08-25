@@ -17,7 +17,7 @@ import { UserPanel, type DashboardView } from "@/components/dashboard/UserPanel"
 import { ProfileHubPage } from "@/components/dashboard/profile-hub/ProfileHubPage";
 import type { AccountPanelTab } from "@/components/dashboard/AccountPanel";
 import { DashboardTabPanel } from "@/components/dashboard/DashboardTabPanel";
-import { DashboardHomeOverview } from "@/components/dashboard/home/DashboardHomeOverview";
+// TEMP_DISABLED: import of DashboardHomeOverview removed (activity/social/AI panel).
 import { SHOW_WEEKLY_TRENDS_PANEL } from "@/lib/dashboard-feature-flags";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import type { GridVideo } from "@/lib/mock-data";
@@ -63,14 +63,9 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
 
   useEffect(() => {
     seedDashboardFromSsr(initial);
-    let cancelled = false;
-    void (async () => {
-      const home = await import("@/lib/dashboard-home-client");
-      if (!cancelled) await home.loadDashboardHome();
-    })();
-    return () => {
-      cancelled = true;
-    };
+    // TEMP_DISABLED: activity / social accounts / AI tasks panel
+    // Re-enable when the panel is ready.
+    // (loadDashboardHome() preload removed so /api/user/dashboard/home is not fetched.)
   }, [initial]);
 
   return (
@@ -106,10 +101,12 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
                 onToggle={() => setWeeklyOpen((v) => !v)}
               />
             ) : null}
-            <DashboardHomeOverview
-              active={activeView === "home"}
-              onOpenProfile={() => setActiveView("profile")}
-            />
+            {/* TEMP_DISABLED: activity / social accounts / AI tasks panel
+                Re-enable when the panel is ready.
+                <DashboardHomeOverview
+                  active={activeView === "home"}
+                  onOpenProfile={() => setActiveView("profile")}
+                /> */}
             <div className="mt-0 flex flex-col gap-3 px-6">
               <SearchResultsSection
                 searchCost={5}
