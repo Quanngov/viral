@@ -5,6 +5,7 @@ export function tabQueryToView(tab: string | null): DashboardView {
   if (tab === "saved") return "saved";
   if (tab === "scripts") return "scripts";
   if (tab === "profile") return "profile";
+  if (tab === "settings") return "settings";
   if (tab === "search") return "home";
   return "home";
 }
@@ -14,6 +15,7 @@ export function viewToTabQuery(view: DashboardView): string {
   if (view === "saved") return "saved";
   if (view === "scripts") return "scripts";
   if (view === "profile") return "profile";
+  if (view === "settings") return "settings";
   return "home";
 }
 

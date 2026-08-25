@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import type { GridVideo } from "@/lib/mock-data";
 import { DashboardAnchoredCard, DashboardModal } from "@/components/dashboard/DashboardModal";
+import { TokenUsageSection } from "@/components/dashboard/TokenUsageSection";
 
 type MockTokenPlansModalProps = {
   open: boolean;
@@ -270,7 +271,7 @@ export function MockAuthModal({ open, onClose, mode }: MockAuthModalProps) {
   );
 }
 
-type SettingsTab = "account" | "notifications" | "limits" | "sources" | "appearance";
+type SettingsTab = "account" | "notifications" | "limits" | "sources" | "appearance" | "usage";
 
 export function AccountSettingsContent() {
   const [tab, setTab] = useState<SettingsTab>("account");
@@ -288,6 +289,7 @@ export function AccountSettingsContent() {
       { id: "limits", label: "Лимиты и токены" },
       { id: "sources", label: "Источники данных" },
       { id: "appearance", label: "Внешний вид" },
+      { id: "usage", label: "Использование токенов" },
     ],
     [],
   );
@@ -391,6 +393,7 @@ export function AccountSettingsContent() {
             <p className="text-xs text-zinc-500">Переключение темы в приложении появится позже; сейчас только макет.</p>
           </div>
         )}
+        {tab === "usage" ? <TokenUsageSection /> : null}
       </div>
     </>
   );

@@ -3,6 +3,7 @@
 import { DashboardModal } from "@/components/dashboard/DashboardModal";
 import {
   AccountPlansContent,
+  AccountSummary,
   AccountTokensContent,
 } from "@/components/dashboard/billing-panels";
 import { AccountSettingsContent } from "@/components/dashboard/mock-dashboard-panels";
@@ -21,8 +22,12 @@ type AccountPanelProps = {
   onTabChange: (tab: AccountPanelTab) => void;
   onClose: () => void;
   email: string;
-  plan: string;
+  planName: string;
   balanceTokens: number;
+  /** Secondary billing stats — optional, shown when provided. */
+  nextGrantAt?: string | null;
+  totalSpent?: number;
+  totalGranted?: number;
   /** Pricing + token packs only — no settings tab. */
   billingOnly?: boolean;
   onLogin?: () => void;
@@ -34,12 +39,12 @@ export function AccountPanel({
   activeTab,
   onTabChange,
   onClose,
-  email,
-  plan,
+  planName,
   balanceTokens,
+  nextGrantAt = null,
+  totalSpent = 0,
+  totalGranted = 0,
   billingOnly = false,
-  onLogin,
-  onLogout,
 }: AccountPanelProps) {
   const tabs = billingOnly ? ALL_TABS.filter((t) => t.id !== "settings") : ALL_TABS;
 
@@ -47,12 +52,22 @@ export function AccountPanel({
     <DashboardModal
       open={open}
       onClose={onClose}
-      title={billingOnly ? "Тарифы и токены" : "Аккаунт"}
-      subtitle={billingOnly ? "Подписка и пакеты токенов." : "Тарифы и токены."}
+      title="Аккаунт"
+      subtitle="Баланс, тариф и настройки."
       placement="center"
       wide
     >
-      <div className="-mx-1 flex overflow-x-auto rounded-xl bg-zinc-100 p-1 scrollbar-hidden">
+      <AccountSummary
+        planName={planName}
+        balanceTokens={balanceTokens}
+        nextGrantAt={nextGrantAt}
+        totalSpent={totalSpent}
+        totalGranted={totalGranted}
+        onTopUp={() => onTabChange("tokens")}
+        onManagePlan={() => onTabChange("plans")}
+      />
+
+      <div className="mt-4 -mx-1 flex overflow-x-auto rounded-xl bg-zinc-100 p-1 scrollbar-hidden">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -71,8 +86,8 @@ export function AccountPanel({
 
       <div className="mt-4">
         {!billingOnly && activeTab === "settings" ? <AccountSettingsContent /> : null}
-        {activeTab === "plans" ? <AccountPlansContent balanceTokens={balanceTokens} /> : null}
-        {activeTab === "tokens" ? <AccountTokensContent balanceTokens={balanceTokens} /> : null}
+        {activeTab === "plans" ? <AccountPlansContent /> : null}
+        {activeTab === "tokens" ? <AccountTokensContent /> : null}
       </div>
     </DashboardModal>
   );

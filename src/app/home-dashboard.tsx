@@ -15,6 +15,7 @@ import { AuthGateProvider } from "@/components/dashboard/AuthGateProvider";
 import { OnboardingHost } from "@/components/dashboard/onboarding/OnboardingHost";
 import { UserPanel, type DashboardView } from "@/components/dashboard/UserPanel";
 import { ProfileHubPage } from "@/components/dashboard/profile-hub/ProfileHubPage";
+import { AccountSettingsPage } from "@/components/dashboard/AccountSettingsPage";
 import type { AccountPanelTab } from "@/components/dashboard/AccountPanel";
 import { DashboardTabPanel } from "@/components/dashboard/DashboardTabPanel";
 // TEMP_DISABLED: import of DashboardHomeOverview removed (activity/social/AI panel).
@@ -26,7 +27,7 @@ import { WeeklyTrendsSection } from "@/components/dashboard/WeeklyTrendsSection"
 import { seedDashboardFromSsr } from "@/lib/dashboard-fetch";
 import { readViewFromLocation, replaceDashboardTabUrl } from "@/lib/dashboard-tab-url";
 
-const VALID_TABS = new Set(["home", "competitors", "saved", "search", "scripts", "profile"]);
+const VALID_TABS = new Set(["home", "competitors", "saved", "search", "scripts", "profile", "settings"]);
 
 function openAccountPanelTab(tab: AccountPanelTab, billingOnly = tab !== "settings") {
   window.dispatchEvent(
@@ -138,6 +139,10 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
               onUpgrade={() => openAccountPanelTab("plans")}
               onBuyTokens={() => openAccountPanelTab("tokens")}
             />
+          </DashboardTabPanel>
+
+          <DashboardTabPanel active={activeView === "settings"}>
+            <AccountSettingsPage />
           </DashboardTabPanel>
             </main>
           </div>

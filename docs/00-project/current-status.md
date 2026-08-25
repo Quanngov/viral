@@ -35,6 +35,8 @@
 - Anonymous usage через httpOnly cookie `viral_session_id`
 - Token wallet + ledger (`UserTokenBalance`, `TokenTransaction`)
 - Plans: FREE, TRIAL, PRO, BUSINESS; token packs; `/api/billing/*`, UI `/billing`
+- Account panel (modal) with summary header (balance, plan, CTA, spent/granted) + tabs; billing stats reused from `/api/billing/me`
+- Account rail: balance as "X / total" + 2-segment scale + upgrade CTA (FREE→PRO, PRO→BUSINESS); settings in nav under Профиль
 - Заказы в `BillingOrder`; confirm через admin — **платёжный провайдер (YooKassa/Stripe) не подключён в коде**
 
 ### Profile Hub & Dashboard Home (новое)

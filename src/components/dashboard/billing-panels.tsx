@@ -72,7 +72,90 @@ export function BalanceBanner({ balanceTokens }: { balanceTokens: number }) {
   );
 }
 
-export function AccountPlansContent({ balanceTokens }: { balanceTokens: number }) {
+export function formatTokens(n: number): string {
+  return Math.max(0, Math.floor(n)).toLocaleString("ru-RU");
+}
+
+/**
+ * Summary header for the account panel: prominent balance, plan, primary CTA,
+ * and secondary billing stats. Pure UI — no data fetching.
+ */
+export function AccountSummary({
+  planName,
+  balanceTokens,
+  nextGrantAt,
+  totalSpent,
+  totalGranted,
+  onTopUp,
+  onManagePlan,
+}: {
+  planName: string;
+  balanceTokens: number;
+  nextGrantAt: string | null;
+  totalSpent: number;
+  totalGranted: number;
+  onTopUp: () => void;
+  onManagePlan: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-white p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Баланс токенов</p>
+          <p className="mt-1 flex items-baseline gap-2">
+            <span className="text-3xl font-bold tabular-nums tracking-tight text-zinc-900">
+              {formatTokens(balanceTokens)}
+            </span>
+            <span className="text-sm text-zinc-500">токенов</span>
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+            Токены расходуются на поиск роликов, шпион конкурентов, транскрибацию и генерацию сценариев.
+          </p>
+        </div>
+        <div className="shrink-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Тариф</p>
+          <span className="mt-1 inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-900">
+            {planName}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={onTopUp}
+          className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+        >
+          Пополнить токены
+        </button>
+        <button
+          type="button"
+          onClick={onManagePlan}
+          className="flex-1 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 transition-colors hover:border-emerald-300 hover:bg-zinc-50 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+        >
+          Управлять тарифом
+        </button>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-1 gap-3 border-t border-zinc-100 pt-4 sm:grid-cols-3">
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">След. начисление</dt>
+          <dd className="mt-0.5 text-sm font-medium text-zinc-800">{formatDate(nextGrantAt)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">Потрачено</dt>
+          <dd className="mt-0.5 text-sm font-medium tabular-nums text-zinc-800">{formatTokens(totalSpent)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">Начислено</dt>
+          <dd className="mt-0.5 text-sm font-medium tabular-nums text-zinc-800">{formatTokens(totalGranted)}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+export function AccountPlansContent() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -111,7 +194,6 @@ export function AccountPlansContent({ balanceTokens }: { balanceTokens: number }
 
   return (
     <>
-      <BalanceBanner balanceTokens={balanceTokens} />
       {msg ? <p className="mt-3 text-sm text-zinc-600">{msg}</p> : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {paidPlans.map((p) => (
@@ -171,7 +253,7 @@ export function AccountPlansContent({ balanceTokens }: { balanceTokens: number }
   );
 }
 
-export function AccountTokensContent({ balanceTokens }: { balanceTokens: number }) {
+export function AccountTokensContent() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -192,7 +274,6 @@ export function AccountTokensContent({ balanceTokens }: { balanceTokens: number 
 
   return (
     <>
-      <BalanceBanner balanceTokens={balanceTokens} />
       {msg ? <p className="mt-3 text-sm text-zinc-600">{msg}</p> : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {packs.map((p) => (
@@ -295,8 +376,8 @@ export function MyBillingPanel() {
         </div>
       </section>
 
-      <AccountPlansContent balanceTokens={data.wallet.balance} />
-      <AccountTokensContent balanceTokens={data.wallet.balance} />
+      <AccountPlansContent />
+      <AccountTokensContent />
     </div>
   );
 }
