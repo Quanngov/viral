@@ -5,7 +5,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Backend (Postgres / Supabase)
 
-Before editing API routes or Prisma: read `docs/BACKEND_ARCHITECTURE.md`. Do not refactor dashboard layout or mobile/sidebar variants unless explicitly requested.
+Before editing API routes or Prisma: read `docs/02-architecture/backend.md` (formerly `docs/BACKEND_ARCHITECTURE.md`). Do not refactor dashboard layout or mobile/sidebar variants unless explicitly requested.
 <!-- END:nextjs-agent-rules -->
 
 ## Design Context

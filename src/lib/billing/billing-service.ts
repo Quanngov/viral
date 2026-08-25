@@ -11,6 +11,7 @@ import {
   type TokenPackId,
 } from "@/lib/billing/billing.config";
 import { prisma } from "@/lib/prisma";
+import { prismaSequential } from "@/lib/prisma-sequential";
 
 type BillingTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -68,18 +69,19 @@ async function getSessionAuthUserId(userId: string, tx?: BillingTx): Promise<str
 
 /** Заявка grant на auth user; false если уже был (в т.ч. гонка). */
 async function tryClaimAuthGrant(
-  tx: BillingTx,
   authUserId: string,
   grantType: string,
   sessionUserId: string,
+  tx?: BillingTx,
 ): Promise<boolean> {
-  const existing = await tx.authBillingGrant.findUnique({
+  const db = tx ?? prisma;
+  const existing = await db.authBillingGrant.findUnique({
     where: { authUserId_grantType: { authUserId, grantType } },
   });
   if (existing) return false;
 
   try {
-    await tx.authBillingGrant.create({
+    await db.authBillingGrant.create({
       data: { authUserId, grantType, sessionUserId },
     });
     return true;
@@ -90,28 +92,63 @@ async function tryClaimAuthGrant(
   }
 }
 
-async function expireSubscriptionIfNeeded(userId: string, tx?: BillingTx): Promise<void> {
-  const db = tx ?? prisma;
-  const sub = await db.userSubscription.findUnique({ where: { userId } });
-  if (!sub) return;
+type SubscriptionRow = {
+  plan: string;
+  status: string;
+  billingInterval: string | null;
+  startedAt: Date;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  renewsAt: Date | null;
+  trialEndsAt: Date | null;
+  cancelledAt: Date | null;
+};
+
+/** Which expiry transition (if any) applies to an already-loaded subscription row. */
+function pendingExpiry(sub: {
+  plan: string;
+  status: string;
+  trialEndsAt: Date | null;
+  currentPeriodEnd: Date | null;
+}): "trial" | "paid" | null {
   const now = new Date();
-  if (sub.status === "TRIAL" && sub.trialEndsAt && sub.trialEndsAt < now) {
-    await db.userSubscription.update({
-      where: { userId },
-      data: { plan: "FREE", status: "EXPIRED" },
-    });
-    return;
-  }
+  if (sub.status === "TRIAL" && sub.trialEndsAt && sub.trialEndsAt < now) return "trial";
   if (
     (sub.plan === "PRO" || sub.plan === "BUSINESS") &&
     sub.currentPeriodEnd &&
     sub.currentPeriodEnd < now
   ) {
-    await db.userSubscription.update({
-      where: { userId },
-      data: { plan: "FREE", status: "EXPIRED", billingInterval: null },
-    });
+    return "paid";
   }
+  return null;
+}
+
+/**
+ * Apply expiry to an already-fetched subscription row without an extra read.
+ * Returns the effective row (updated in DB only when a transition is needed).
+ */
+async function applyExpiryToRow<T extends SubscriptionRow>(userId: string, sub: T): Promise<T> {
+  const kind = pendingExpiry(sub);
+  if (!kind) return sub;
+  const data =
+    kind === "trial"
+      ? { plan: "FREE", status: "EXPIRED" }
+      : { plan: "FREE", status: "EXPIRED", billingInterval: null };
+  const updated = await prisma.userSubscription.update({ where: { userId }, data });
+  return updated as unknown as T;
+}
+
+async function expireSubscriptionIfNeeded(userId: string, tx?: BillingTx): Promise<void> {
+  const db = tx ?? prisma;
+  const sub = await db.userSubscription.findUnique({ where: { userId } });
+  if (!sub) return;
+  const kind = pendingExpiry(sub);
+  if (!kind) return;
+  const data =
+    kind === "trial"
+      ? { plan: "FREE", status: "EXPIRED" }
+      : { plan: "FREE", status: "EXPIRED", billingInterval: null };
+  await db.userSubscription.update({ where: { userId }, data });
 }
 function subscriptionToSnapshot(row: {
   plan: string;
@@ -143,39 +180,89 @@ function subscriptionToSnapshot(row: {
   };
 }
 
-/** Создаёт подписку FREE + кошелёк + разовое начисление 60 tok для нового пользователя. */
-export async function ensureBillingForUser(userId: string): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    let sub = await tx.userSubscription.findUnique({ where: { userId } });
-    if (!sub) {
-      sub = await tx.userSubscription.create({
-        data: {
-          userId,
-          plan: "FREE",
-          status: "ACTIVE",
-        },
-      });
-    }
+type WalletRow = {
+  balance: number;
+  totalSpent: number;
+  totalGranted: number;
+  lastGrantedAt: Date | null;
+};
 
-    let wallet = await tx.userTokenBalance.findUnique({ where: { userId } });
-    if (!wallet) {
-      wallet = await tx.userTokenBalance.create({
-        data: { userId, balance: 0, totalSpent: 0, totalGranted: 0 },
-      });
-    }
+type FullSubscriptionRow = SubscriptionRow;
 
-    const authUserId = await getSessionAuthUserId(userId, tx);
-    if (authUserId && sub.plan === "FREE") {
-      const claimed = await tryClaimAuthGrant(tx, authUserId, "FREE_GRANT", userId);
-      if (claimed) {
-        await grantTokensInTx(tx, userId, BILLING_PLANS.FREE.initialGrantTokens, {
-          type: "FREE_GRANT",
-          reason: "free_signup",
-          source: "FREE",
-        });
-      }
+/**
+ * Создаёт подписку FREE + кошелёк + разовое начисление для нового пользователя.
+ * Без interactive $transaction — pooler connection_limit=1 не допускает параллельных tx.
+ *
+ * Returns the loaded subscription + wallet rows so callers can avoid re-reading them
+ * (each Prisma round-trip on the pooled connection costs ~280ms).
+ */
+export async function ensureBillingForUser(
+  userId: string,
+): Promise<{ sub: FullSubscriptionRow; wallet: WalletRow }> {
+  const [existingSub, existingWallet] = await prismaSequential(
+    () => prisma.userSubscription.findUnique({ where: { userId } }),
+    () => prisma.userTokenBalance.findUnique({ where: { userId } }),
+  );
+
+  if (existingSub && existingWallet) {
+    return { sub: existingSub, wallet: existingWallet };
+  }
+
+  const sub =
+    existingSub ??
+    (await prisma.userSubscription.upsert({
+      where: { userId },
+      create: { userId, plan: "FREE", status: "ACTIVE" },
+      update: {},
+    }));
+
+  let wallet =
+    existingWallet ??
+    (await prisma.userTokenBalance.upsert({
+      where: { userId },
+      create: { userId, balance: 0, totalSpent: 0, totalGranted: 0 },
+      update: {},
+    }));
+
+  const authUserId = await getSessionAuthUserId(userId);
+  if (authUserId && sub.plan === "FREE") {
+    const claimed = await tryClaimAuthGrant(authUserId, "FREE_GRANT", userId);
+    if (claimed) {
+      await grantTokens(userId, BILLING_PLANS.FREE.initialGrantTokens, {
+        type: "FREE_GRANT",
+        reason: "free_signup",
+        source: "FREE",
+      });
+      wallet = await prisma.userTokenBalance.findUniqueOrThrow({ where: { userId } });
     }
-  });
+  }
+
+  return { sub, wallet };
+}
+
+function walletRowToSnapshot(row: WalletRow | null): WalletSnapshot {
+  return {
+    balance: row?.balance ?? 0,
+    totalSpent: row?.totalSpent ?? 0,
+    totalGranted: row?.totalGranted ?? 0,
+    lastGrantedAt: toIso(row?.lastGrantedAt),
+  };
+}
+
+/**
+ * Single-pass billing read: ensures rows exist, applies expiry in memory, and returns
+ * both snapshots. Replaces the previous ensureBilling + getSubscriptionSnapshot +
+ * getWalletSnapshot chain (which read subscription 3× and balance 2×).
+ */
+export async function loadBillingBundle(
+  userId: string,
+): Promise<{ subscription: BillingSnapshot; wallet: WalletSnapshot }> {
+  const { sub, wallet } = await ensureBillingForUser(userId);
+  const fixedSub = await applyExpiryToRow(userId, sub);
+  return {
+    subscription: subscriptionToSnapshot(fixedSub),
+    wallet: walletRowToSnapshot(wallet),
+  };
 }
 
 async function grantTokensInTx(
@@ -326,30 +413,31 @@ export async function getWalletSnapshot(
   userId: string,
   opts?: { skipEnsureBilling?: boolean },
 ): Promise<WalletSnapshot> {
+  // When ensuring billing, reuse the wallet row it already loaded (avoids a 2nd read).
   if (!opts?.skipEnsureBilling) {
-    await ensureBillingForUser(userId);
+    const { wallet } = await ensureBillingForUser(userId);
+    return walletRowToSnapshot(wallet);
   }
   const row = await prisma.userTokenBalance.findUnique({
     where: { userId },
     select: { balance: true, totalSpent: true, totalGranted: true, lastGrantedAt: true },
   });
-  return {
-    balance: row?.balance ?? 0,
-    totalSpent: row?.totalSpent ?? 0,
-    totalGranted: row?.totalGranted ?? 0,
-    lastGrantedAt: toIso(row?.lastGrantedAt),
-  };
+  return walletRowToSnapshot(row);
 }
 
-export async function getSubscriptionSnapshot(userId: string): Promise<BillingSnapshot> {
-  await ensureBillingForUser(userId);
-  await expireSubscriptionIfNeeded(userId);
-  const row = await prisma.userSubscription.findUniqueOrThrow({ where: { userId } });
-  return subscriptionToSnapshot(row);
+export async function getSubscriptionSnapshot(
+  userId: string,
+  opts?: { skipEnsureBilling?: boolean },
+): Promise<BillingSnapshot> {
+  // Read the row once, then apply expiry in memory (updating only when needed).
+  const row = opts?.skipEnsureBilling
+    ? await prisma.userSubscription.findUniqueOrThrow({ where: { userId } })
+    : (await ensureBillingForUser(userId)).sub;
+  const fixed = await applyExpiryToRow(userId, row);
+  return subscriptionToSnapshot(fixed);
 }
 
 export async function getMaxCompetitorsForUser(userId: string): Promise<number> {
-  await expireSubscriptionIfNeeded(userId);
   const sub = await getSubscriptionSnapshot(userId);
   return sub.maxCompetitors;
 }
@@ -404,7 +492,7 @@ export async function activateTrial(userId: string): Promise<{ ok: boolean; erro
 
   try {
     await prisma.$transaction(async (tx) => {
-      const claimed = await tryClaimAuthGrant(tx, authUserId, "TRIAL_GRANT", userId);
+      const claimed = await tryClaimAuthGrant(authUserId, "TRIAL_GRANT", userId, tx);
       if (!claimed) {
         throw new Error("trial_already_used");
       }

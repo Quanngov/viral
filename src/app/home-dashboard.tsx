@@ -14,15 +14,25 @@ import { AuthSessionProvider } from "@/components/dashboard/AuthSessionProvider"
 import { AuthGateProvider } from "@/components/dashboard/AuthGateProvider";
 import { OnboardingHost } from "@/components/dashboard/onboarding/OnboardingHost";
 import { UserPanel, type DashboardView } from "@/components/dashboard/UserPanel";
+import { ProfileHubPage } from "@/components/dashboard/profile-hub/ProfileHubPage";
+import type { AccountPanelTab } from "@/components/dashboard/AccountPanel";
 import { DashboardTabPanel } from "@/components/dashboard/DashboardTabPanel";
-import { WeeklyTrendsSection } from "@/components/dashboard/WeeklyTrendsSection";
+import { DashboardHomeOverview } from "@/components/dashboard/home/DashboardHomeOverview";
+import { SHOW_WEEKLY_TRENDS_PANEL } from "@/lib/dashboard-feature-flags";
 import type { DashboardInitialPayload } from "@/lib/dashboard-initial";
 import type { GridVideo } from "@/lib/mock-data";
 import { mockWeeklyTrends } from "@/lib/mock-data";
+import { WeeklyTrendsSection } from "@/components/dashboard/WeeklyTrendsSection";
 import { seedDashboardFromSsr } from "@/lib/dashboard-fetch";
 import { readViewFromLocation, replaceDashboardTabUrl } from "@/lib/dashboard-tab-url";
 
-const VALID_TABS = new Set(["home", "competitors", "saved", "search", "scripts"]);
+const VALID_TABS = new Set(["home", "competitors", "saved", "search", "scripts", "profile"]);
+
+function openAccountPanelTab(tab: AccountPanelTab, billingOnly = tab !== "settings") {
+  window.dispatchEvent(
+    new CustomEvent("viral:open-account", { detail: { tab, billingOnly } }),
+  );
+}
 
 function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
   const [activeView, setActiveViewState] = useState<DashboardView>("home");
@@ -53,6 +63,14 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
 
   useEffect(() => {
     seedDashboardFromSsr(initial);
+    let cancelled = false;
+    void (async () => {
+      const home = await import("@/lib/dashboard-home-client");
+      if (!cancelled) await home.loadDashboardHome();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [initial]);
 
   return (
@@ -68,7 +86,7 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
                 <LiveTrendsSidebar initial={initial} onVideoClick={setSelectedVideo} />
               </section>
               <section className="shrink-0 overflow-visible">
-                <UserPanel activeView={activeView} onChangeView={setActiveView} />
+                <UserPanel activeView={activeView} onChangeView={setActiveView} onVideoClick={setSelectedVideo} />
               </section>
             </aside>
 
@@ -81,10 +99,16 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
             >
           <DashboardTabPanel active={activeView === "home"}>
             <LiveTrendsSidebar variant="mobile-horizontal" initial={initial} onVideoClick={setSelectedVideo} />
-            <WeeklyTrendsSection
-              trends={mockWeeklyTrends}
-              open={weeklyOpen}
-              onToggle={() => setWeeklyOpen((v) => !v)}
+            {SHOW_WEEKLY_TRENDS_PANEL ? (
+              <WeeklyTrendsSection
+                trends={mockWeeklyTrends}
+                open={weeklyOpen}
+                onToggle={() => setWeeklyOpen((v) => !v)}
+              />
+            ) : null}
+            <DashboardHomeOverview
+              active={activeView === "home"}
+              onOpenProfile={() => setActiveView("profile")}
             />
             <div className="mt-0 flex flex-col gap-3 px-6">
               <SearchResultsSection
@@ -109,11 +133,20 @@ function HomeDashboardInner({ initial }: { initial: DashboardInitialPayload }) {
           >
             <ScriptsSection active={activeView === "scripts"} />
           </DashboardTabPanel>
+
+          <DashboardTabPanel active={activeView === "profile"}>
+            <ProfileHubPage
+              active={activeView === "profile"}
+              onVideoClick={setSelectedVideo}
+              onUpgrade={() => openAccountPanelTab("plans")}
+              onBuyTokens={() => openAccountPanelTab("tokens")}
+            />
+          </DashboardTabPanel>
             </main>
           </div>
 
           <div className="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] lg:hidden">
-            <UserPanel layout="bottom-nav" activeView={activeView} onChangeView={setActiveView} />
+            <UserPanel layout="bottom-nav" activeView={activeView} onChangeView={setActiveView} onVideoClick={setSelectedVideo} />
           </div>
 
         <VideoDetailPanel

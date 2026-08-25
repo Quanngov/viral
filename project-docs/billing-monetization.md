@@ -1,57 +1,6 @@
-# Billing & Monetization (продукт)
+# Billing & Monetization (redirect)
 
-> Источник правды в коде: `src/lib/billing/billing.config.ts`. Обновлено: 2026-05-31.
+> **Product summary:** [docs/01-product/features.md](../docs/01-product/features.md) (Billing section)  
+> **Code source of truth:** `src/lib/billing/billing.config.ts`
 
-## Тарифы
-
-| Тариф | Цена / мес | Цена / год | Токены | Конкуренты |
-|-------|----------:|-----------:|-------:|-----------:|
-| **FREE** | 0 ₽ | — | 60 разово | 0 |
-| **TRIAL** | 0 ₽ · 3 дня | — | 200 при активации | 1 |
-| **PRO** | 2 490 ₽ | 24 900 ₽ | 3 000 / мес | 30 |
-| **BUSINESS** | 11 900 ₽ | 119 000 ₽ | 18 000 / мес | 100 |
-
-## Пакеты токенов
-
-| Пакет | Цена | Токены |
-|-------|-----:|-------:|
-| SMALL | 490 ₽ | 500 |
-| MEDIUM | 1 490 ₽ | 2 000 |
-| LARGE | 2 990 ₽ | 5 000 |
-
-## Стоимость действий (токены)
-
-| Действие | Стоимость |
-|----------|----------:|
-| Поиск роликов | 5 |
-| Ещё ролики | 5 |
-| Генерация сценария | 25 |
-| Транскрибация | 10 |
-| Добавить конкурента | 35 |
-| Обновить конкурента | 35 |
-| Daily Sync | 5 |
-
-## Ledger
-
-Типы операций: `SUBSCRIPTION_GRANT`, `TRIAL_GRANT`, `FREE_GRANT`, `TOKEN_PACK`, `SPEND`, `REFUND`, `ADMIN_ADJUSTMENT`.
-
-## API
-
-| Endpoint | Назначение |
-|----------|------------|
-| `GET /api/billing/config` | Публичный конфиг |
-| `GET /api/billing/me` | Тариф + баланс + ledger |
-| `POST /api/billing/trial` | Активация trial |
-| `POST /api/billing/orders` | Создание заказа |
-| `POST /api/billing/orders/[id]/confirm` | Подтверждение оплаты (admin/webhook) |
-| `GET /api/admin/billing/stats` | MRR, пользователи, токены |
-
-## UI
-
-- `/billing` — страница «Мой тариф»
-- Аккаунт → Тарифы / Токены — из конфига
-- `/admin` — блок Billing & Monetization
-
-## Платежи
-
-Заказы создаются в `BillingOrder` со статусом `PENDING`. После оплаты — `confirm` начисляет токены и активирует подписку. **YooKassa/Stripe — следующий шаг.**
+Pricing models (unit economics): `project-docs/pricing/` — not duplicated in `docs/`.

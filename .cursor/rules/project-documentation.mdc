@@ -1,0 +1,102 @@
+---
+description: "ViralCloud project documentation and Obsidian synchronization"
+alwaysApply: true
+---
+
+# ViralCloud Documentation Rules
+
+The project uses Markdown documentation in `docs/` as the central project knowledge base.
+
+Obsidian uses the `docs/` folder as its Vault.
+
+Cursor and Obsidian therefore work with the same Markdown files.
+
+## Before substantial changes
+
+Before making significant architectural, backend, database, infrastructure, authentication or integration changes:
+
+1. Read the relevant documentation in `docs/`.
+2. Check `docs/00-project/current-status.md`.
+3. Check relevant files in `docs/08-decisions/`.
+4. Preserve existing architectural decisions unless the task explicitly requires changing them.
+5. Do not assume undocumented behavior.
+6. Use the current code as the source of truth for implementation details.
+
+## After every completed development task
+
+If the task changes the project:
+
+1. Identify which documentation is affected.
+2. Update the relevant existing Markdown file in `docs/`.
+3. Create a new documentation file only if necessary.
+4. Keep documentation concise and factual.
+5. Do not rewrite entire documents unnecessarily.
+6. Do not document assumptions as facts.
+7. Do not invent functionality.
+8. Never write secrets, passwords, API keys, OAuth tokens or private credentials into documentation.
+
+## Development log
+
+After every completed task that changes the project, add a short entry to:
+
+docs/09-changelog/development-log.md
+
+Format:
+
+## YYYY-MM-DD — Short title
+
+- Changed: ...
+- Result: ...
+- Notes: ...
+
+Maximum 3–5 bullets.
+
+Only record meaningful changes.
+Do not list every edited file.
+Do not describe routine commands.
+
+## Architecture decisions
+
+If a task changes an important architectural decision, update:
+
+docs/08-decisions/architecture-decisions.md
+
+Record only:
+
+- Decision
+- Reason
+- Consequence
+
+Keep it concise.
+
+## Current status
+
+If a task changes the current state of the project, update:
+
+docs/00-project/current-status.md
+
+The document must describe the actual current state of the project.
+
+## Obsidian links
+
+Use Obsidian wiki-links when documents are related.
+
+Examples:
+
+[[architecture]]
+[[database]]
+[[instagram]]
+[[youtube]]
+[[authentication]]
+[[infrastructure]]
+[[backups]]
+
+Do not create duplicate documentation when an existing document can be updated.
+
+Do not modify documentation merely to make it longer.
+
+## Important
+
+Documentation is part of the project.
+
+A completed development task is not considered fully documented until the relevant documentation and development log have been updated.

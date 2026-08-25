@@ -237,6 +237,8 @@ model SessionUser {
   scriptChats          ScriptChat[]
   scriptUserProfile    ScriptUserProfile?
   onboardingProfile    UserOnboardingProfile?
+  socialAccounts       UserSocialAccount[]
+  profileAiAnalyses    UserProfileAiAnalysis[]
 }
 
 /** Онбординг и публичный профиль создателя (соцсети, ниша, ссылки). */
@@ -255,6 +257,193 @@ model UserOnboardingProfile {
   updatedAt         DateTime    @updatedAt
 
   @@index([userId])
+}
+
+/** Подключённые соцсети пользователя и снимок аналитики. */
+model UserSocialAccount {
+  id                String      @id @default(cuid())
+  userId            String
+  user              SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform          String
+  username          String
+  displayName       String      @default("")
+  avatarUrl         String      @default("")
+  profileUrl        String      @default("")
+  followers         Int?
+  followersPrev     Int?
+  totalLikes        Int?
+  avgViews          Int?
+  avgViewsPrev      Int?
+  avgEngagement     Float?
+  videoCount        Int?
+  monthlyViews      Int?
+  postingFreq       String      @default("")
+  lastUploadAt      DateTime?
+  growthPercent     Float?
+  bestVideoJson     Json?
+  statsSource       String      @default("pending")
+  statsUpdatedAt    DateTime?
+  /** manual | oauth */
+  authMethod        String      @default("manual")
+  /** disconnected | pending_oauth | connected | error | revoked */
+  connectionStatus  String      @default("disconnected")
+  /** healthy | degraded | error | disconnected | revoked */
+  connectionHealth  String      @default("disconnected")
+  externalAccountId String      @default("")
+  /** idle | queued | running | failed */
+  syncStatus        String      @default("idle")
+  /** polling | webhook | hybrid */
+  updateStrategy    String      @default("polling")
+  lastSyncAt        DateTime?
+  lastSyncSuccessAt DateTime?
+  lastSyncFailedAt  DateTime?
+  nextSyncAt        DateTime?
+  lastSyncError     String      @default("")
+  manualRefreshAt   DateTime?
+  connectedAt       DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  oauthCredential   UserSocialOAuthCredential?
+  syncJobs          SocialSyncJob[]
+  syncLogs          SocialSyncLog[]
+  snapshots         SocialAccountSnapshot[]
+  webhookSubscription SocialWebhookSubscription?
+
+  @@unique([userId, platform])
+  @@index([userId])
+  @@index([syncStatus, nextSyncAt])
+  @@index([platform, connectionStatus])
+}
+
+/** OAuth tokens — ciphertext only (AES-256-GCM at app layer). */
+model UserSocialOAuthCredential {
+  id              String            @id @default(cuid())
+  socialAccountId String            @unique
+  socialAccount   UserSocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  /** AES-encrypted access token */
+  accessToken     String            @default("")
+  /** AES-encrypted refresh token */
+  refreshToken    String            @default("")
+  tokenExpiresAt  DateTime?
+  scopes          String[]          @default([])
+  providerUserId  String            @default("")
+  lastValidatedAt DateTime?
+  updatedAt       DateTime          @updatedAt
+}
+
+/** Sync job queue — all platforms go through SocialSyncService. */
+model SocialSyncJob {
+  id            String            @id @default(cuid())
+  socialAccountId String
+  socialAccount UserSocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  platform      String
+  trigger       String
+  status        String            @default("pending")
+  priority      Int               @default(0)
+  attempts      Int               @default(0)
+  maxAttempts   Int               @default(5)
+  scheduledFor  DateTime          @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  lastError     String            @default("")
+  payloadJson   Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status, scheduledFor, priority])
+  @@index([socialAccountId, createdAt])
+}
+
+/** Synchronization audit log. */
+model SocialSyncLog {
+  id              String            @id @default(cuid())
+  socialAccountId String
+  socialAccount   UserSocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  platform        String
+  trigger         String
+  level           String            @default("info")
+  message         String
+  metaJson        Json?
+  createdAt       DateTime          @default(now())
+
+  @@index([socialAccountId, createdAt])
+  @@index([platform, createdAt])
+  @@index([level, createdAt])
+}
+
+/** Historical metric snapshots for charts and AI analysis. */
+model SocialAccountSnapshot {
+  id              String            @id @default(cuid())
+  socialAccountId String
+  socialAccount   UserSocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  platform        String
+  capturedAt      DateTime          @default(now())
+  followers       Int?
+  totalLikes      Int?
+  avgViews        Int?
+  avgEngagement   Float?
+  videoCount      Int?
+  monthlyViews    Int?
+  totalComments   Int?
+  engagementRate  Float?
+  rawJson         Json?
+
+  @@index([socialAccountId, capturedAt])
+}
+
+/** Webhook subscription per connected account (when platform supports it). */
+model SocialWebhookSubscription {
+  id                String            @id @default(cuid())
+  socialAccountId   String            @unique
+  socialAccount     UserSocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  platform          String
+  externalSubId     String            @default("")
+  status            String            @default("inactive")
+  callbackUrl       String            @default("")
+  subscribedTopics  String[]          @default([])
+  lastEventAt       DateTime?
+  lastSuccessAt     DateTime?
+  lastFailedAt      DateTime?
+  failureCount      Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  events            SocialWebhookEvent[]
+
+  @@index([platform, status])
+}
+
+/** Incoming webhook events and processing state. */
+model SocialWebhookEvent {
+  id             String                   @id @default(cuid())
+  subscriptionId String
+  subscription   SocialWebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  platform       String
+  eventType      String                   @default("")
+  externalEventId String                  @default("")
+  status         String                   @default("pending")
+  payloadJson    Json?
+  errorMessage   String                   @default("")
+  receivedAt     DateTime                 @default(now())
+  processedAt    DateTime?
+  retryAfter     DateTime?
+  attempts       Int                      @default(0)
+
+  @@index([status, retryAfter])
+  @@index([subscriptionId, receivedAt])
+  @@index([platform, receivedAt])
+}
+
+/** AI-разбор аккаунта (premium, архитектура отчёта). */
+model UserProfileAiAnalysis {
+  id          String      @id @default(cuid())
+  userId      String
+  user        SessionUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      String      @default("pending")
+  tokenCost   Int         @default(500)
+  reportJson  Json?
+  createdAt   DateTime    @default(now())
+  completedAt DateTime?
+
+  @@index([userId, createdAt])
 }
 
 /** Настройки сценариста для генерации (одна запись на session user). */

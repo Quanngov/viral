@@ -1,7 +1,6 @@
 import "server-only";
 
 import { formatViewsCount } from "@/lib/format-video";
-import { prisma } from "@/lib/prisma";
 
 export type LandingMarqueeVideo = {
   id: string;
@@ -9,28 +8,20 @@ export type LandingMarqueeVideo = {
   views: string;
 };
 
-export async function getLandingMarqueeVideos(limit = 30): Promise<LandingMarqueeVideo[]> {
-  try {
-    const videos = await prisma.video.findMany({
-      where: {
-        title: { not: "" },
-        views: { gt: 1000 },
-      },
-      orderBy: [{ views: "desc" }, { publishedAt: "desc" }],
-      take: limit,
-      select: {
-        id: true,
-        title: true,
-        views: true,
-      },
-    });
+const STATIC_MARQUEE: { id: string; title: string; views: number }[] = [
+  { id: "static-1", title: "Как найти тренд за 5 минут", views: 2_450_000 },
+  { id: "static-2", title: "Топ-3 хука для удержания", views: 1_120_000 },
+  { id: "static-3", title: "Сценарий под нишу: разбор", views: 980_000 },
+  { id: "static-4", title: "Вирусный монтаж: что работает", views: 3_310_000 },
+  { id: "static-5", title: "30 идей роликов на неделю", views: 740_000 },
+  { id: "static-6", title: "Рост подписчиков без рекламы", views: 1_860_000 },
+];
 
-    return videos.map((video) => ({
-      id: video.id,
-      title: video.title.trim(),
-      views: formatViewsCount(video.views),
-    }));
-  } catch {
-    return [];
-  }
+export async function getLandingMarqueeVideos(limit = 30): Promise<LandingMarqueeVideo[]> {
+  // Must stay fully static: landing route must not depend on DB or auth.
+  return STATIC_MARQUEE.slice(0, Math.max(1, Math.min(60, limit))).map((v) => ({
+    id: v.id,
+    title: v.title,
+    views: formatViewsCount(v.views),
+  }));
 }

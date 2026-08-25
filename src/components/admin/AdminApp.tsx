@@ -14,6 +14,7 @@ import {
   AdminHealthPage,
   AdminProvidersPage,
 } from "@/components/admin/pages/AdminSystemPages";
+import { AdminSocialSyncPage } from "@/components/admin/pages/AdminSocialSyncPage";
 import {
   AdminApiKeysPage,
   AdminCostsPage,
@@ -75,6 +76,8 @@ export function AdminApp({ section }: AdminAppProps) {
       return <AdminJobsPage />;
     case "providers":
       return <AdminProvidersPage />;
+    case "social-sync":
+      return <AdminSocialSyncPage />;
     case "logs":
       return <AdminLogsPage />;
     case "errors":

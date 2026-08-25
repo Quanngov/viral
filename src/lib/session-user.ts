@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { linkAuthUserToSessionUser } from "@/lib/auth-bridge";
 import { ensureBillingForUser } from "@/lib/billing/billing-service";
-import { getWalletSnapshot } from "@/lib/billing/billing-service";
 import { prisma } from "@/lib/prisma";
 
 const SESSION_COOKIE = "viral_session_id";
@@ -25,7 +24,6 @@ export async function ensureSessionUser(): Promise<{ userId: string; sessionKey:
       where: { id: appUserId },
       select: { id: true, sessionKey: true },
     });
-    await ensureBillingForUser(user.id);
     return { userId: user.id, sessionKey: user.sessionKey };
   }
 
@@ -44,26 +42,27 @@ export async function ensureSessionUser(): Promise<{ userId: string; sessionKey:
 
   const key = sessionKey;
 
-  const user = await prisma.$transaction(async (tx) => {
-    let row = await tx.sessionUser.findUnique({
-      where: { sessionKey: key },
-      select: { id: true, sessionKey: true },
-    });
-    if (!row) {
-      row = await tx.sessionUser.create({
-        data: { sessionKey: key },
-        select: { id: true, sessionKey: true },
-      });
-    }
-    return row;
+  // Read-first: existing sessions (the common case) only pay a single indexed read
+  // instead of an upsert write on every request.
+  const existing = await prisma.sessionUser.findUnique({
+    where: { sessionKey: key },
+    select: { id: true, sessionKey: true },
+  });
+  if (existing) return { userId: existing.id, sessionKey: existing.sessionKey };
+
+  const user = await prisma.sessionUser.upsert({
+    where: { sessionKey: key },
+    create: { sessionKey: key },
+    update: {},
+    select: { id: true, sessionKey: true },
   });
 
-  await ensureBillingForUser(user.id);
   return { userId: user.id, sessionKey: user.sessionKey };
 }
 
 export async function getTokenBalance(): Promise<number> {
   const { userId } = await ensureSessionUser();
-  const wallet = await getWalletSnapshot(userId, { skipEnsureBilling: true });
+  // ensureBillingForUser already returns the wallet row — no extra read needed.
+  const { wallet } = await ensureBillingForUser(userId);
   return wallet.balance;
 }

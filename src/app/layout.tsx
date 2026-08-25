@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TrendRadar — трендовые видео",
+  title: "ViralCloud",
   description: "Поиск трендовых видео, анализ и сценарии для создателей контента",
+  icons: {
+    icon: [{ url: "/viral-logo.png", type: "image/png" }],
+    apple: "/viral-logo.png",
+  },
 };
 
 export default function RootLayout({

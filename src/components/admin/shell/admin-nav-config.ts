@@ -17,6 +17,7 @@ export type AdminSectionId =
   | "queues"
   | "jobs"
   | "providers"
+  | "social-sync"
   | "costs"
   | "logs"
   | "errors"
@@ -200,6 +201,13 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         label: "Провайдеры",
         href: "/admin/providers",
         description: "Статус API-ключей и внешних сервисов",
+        status: "live",
+      },
+      {
+        id: "social-sync",
+        label: "Social Sync",
+        href: "/admin/social-sync",
+        description: "OAuth, очередь синхронизации, webhooks, логи",
         status: "live",
       },
       {

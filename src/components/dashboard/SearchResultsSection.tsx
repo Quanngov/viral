@@ -358,11 +358,6 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
   const showHomeEmpty = homeReady && !session && displayedVideos.length === 0;
   const showSearchEmpty = homeReady && session && !searchLoading && displayedVideos.length === 0;
 
-  const statsParts: string[] = [];
-  if (totalCount !== null) {
-    statsParts.push(`В базе: ${totalCount} роликов`);
-  }
-
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-transparent px-0 pb-4 pt-1">
       <SearchToolbar
@@ -388,10 +383,6 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
 
       {homeReady && noMore && session && videos.length === 0 && !searchLoading ? (
         <p className="text-sm text-zinc-600">Пока больше роликов нет.</p>
-      ) : null}
-
-      {homeReady && statsParts.length > 0 ? (
-        <p className="text-xs text-zinc-600">{statsParts.join(" • ")}</p>
       ) : null}
 
       {showHomeEmpty ? (

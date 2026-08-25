@@ -6,12 +6,12 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { linkAuthUserToSessionUser } from "@/lib/auth-bridge";
 import { verifyPassword } from "@/lib/password";
-import { getPrismaBase } from "@/lib/prisma-base";
+import { prisma } from "@/lib/prisma";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: process.env.AUTH_TRUST_HOST === "true",
   secret: process.env.AUTH_SECRET,
-  adapter: PrismaAdapter(getPrismaBase()),
+  adapter: PrismaAdapter(prisma as never),
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 30 },
   pages: {
     signIn: "/",
@@ -36,7 +36,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = String(credentials?.password ?? "");
         if (!email || !password) return null;
 
-        const user = await getPrismaBase().user.findUnique({ where: { email } });
+        const user = await prisma.user.findUnique({ where: { email } });
         if (!user?.passwordHash) return null;
 
         const ok = await verifyPassword(password, user.passwordHash);

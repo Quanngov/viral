@@ -5,14 +5,12 @@ import {
   AccountPlansContent,
   AccountTokensContent,
 } from "@/components/dashboard/billing-panels";
-import { UserProfilePanel } from "@/components/dashboard/UserProfilePanel";
 import { AccountSettingsContent } from "@/components/dashboard/mock-dashboard-panels";
 
-export type AccountPanelTab = "settings" | "profile" | "plans" | "tokens";
+export type AccountPanelTab = "settings" | "plans" | "tokens";
 
-const TABS: { id: AccountPanelTab; label: string }[] = [
+const ALL_TABS: { id: AccountPanelTab; label: string }[] = [
   { id: "settings", label: "Настройки" },
-  { id: "profile", label: "Профиль" },
   { id: "plans", label: "Тарифы" },
   { id: "tokens", label: "Токены" },
 ];
@@ -25,6 +23,8 @@ type AccountPanelProps = {
   email: string;
   plan: string;
   balanceTokens: number;
+  /** Pricing + token packs only — no settings tab. */
+  billingOnly?: boolean;
   onLogin?: () => void;
   onLogout?: () => void;
 };
@@ -37,20 +37,23 @@ export function AccountPanel({
   email,
   plan,
   balanceTokens,
+  billingOnly = false,
   onLogin,
   onLogout,
 }: AccountPanelProps) {
+  const tabs = billingOnly ? ALL_TABS.filter((t) => t.id !== "settings") : ALL_TABS;
+
   return (
     <DashboardModal
       open={open}
       onClose={onClose}
-      title="Аккаунт"
-      subtitle="Тарифы, токены и профиль."
+      title={billingOnly ? "Тарифы и токены" : "Аккаунт"}
+      subtitle={billingOnly ? "Подписка и пакеты токенов." : "Тарифы и токены."}
       placement="center"
       wide
     >
       <div className="-mx-1 flex overflow-x-auto rounded-xl bg-zinc-100 p-1 scrollbar-hidden">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -67,10 +70,7 @@ export function AccountPanel({
       </div>
 
       <div className="mt-4">
-        {activeTab === "settings" ? <AccountSettingsContent /> : null}
-        {activeTab === "profile" ? (
-          <UserProfilePanel email={email} plan={plan} balanceTokens={balanceTokens} />
-        ) : null}
+        {!billingOnly && activeTab === "settings" ? <AccountSettingsContent /> : null}
         {activeTab === "plans" ? <AccountPlansContent balanceTokens={balanceTokens} /> : null}
         {activeTab === "tokens" ? <AccountTokensContent balanceTokens={balanceTokens} /> : null}
       </div>

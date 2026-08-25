@@ -1,17 +1,18 @@
 "use client";
 
-import { FilePenLine } from "lucide-react";
+import { FilePenLine, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAuthDisplay } from "@/hooks/use-auth-display";
 import { useAuthGate } from "@/components/dashboard/AuthGateProvider";
 import { AccountPanel, type AccountPanelTab } from "@/components/dashboard/AccountPanel";
-import type { AuthModalMode } from "@/components/dashboard/AuthModal";
-import { MockSimpleInfoModal } from "@/components/dashboard/mock-dashboard-panels";
+import type { GridVideo } from "@/lib/mock-data";
+import { ViralLogo } from "@/components/landing/ui/ViralLogo";
 import { useCountUp } from "@/hooks/use-count-up";
 import { formatTokensRuSpace } from "@/lib/format-metrics";
 import { loadTokenBalance } from "@/lib/dashboard-fetch";
+import { BILLING_PLANS, type BillingPlanId } from "@/lib/billing/billing.config";
 
-export type DashboardView = "home" | "competitors" | "saved" | "scripts";
+export type DashboardView = "home" | "competitors" | "saved" | "scripts" | "profile";
 
 const tools: { key: string; label: string; view?: DashboardView; soon?: boolean; icon: ReactNode }[] = [
   {
@@ -60,6 +61,16 @@ const tools: { key: string; label: string; view?: DashboardView; soon?: boolean;
     ),
   },
   {
+    key: "profile",
+    label: "Профиль",
+    view: "profile",
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+      </svg>
+    ),
+  },
+  {
     key: "content-radar",
     label: "Контент-Радар (скоро)",
     soon: true,
@@ -71,22 +82,20 @@ const tools: { key: string; label: string; view?: DashboardView; soon?: boolean;
   },
 ];
 
-const SERVICE_NAME = "TrendRadar";
-
 type UserPanelProps = {
   activeView: DashboardView;
   onChangeView: (view: DashboardView) => void;
   layout?: "sidebar" | "bottom-nav";
+  onVideoClick?: (video: GridVideo) => void;
 };
 
 const accountModals = (
   props: {
     accountPanelOpen: boolean;
     accountPanelTab: AccountPanelTab;
+    accountPanelBillingOnly: boolean;
     setAccountPanelTab: (tab: AccountPanelTab) => void;
     setAccountPanelOpen: (open: boolean) => void;
-    serviceMenuOpen: boolean;
-    setServiceMenuOpen: (open: boolean) => void;
     showAuthed: boolean;
     displayEmail: string;
     displayTokens: number;
@@ -103,44 +112,48 @@ const accountModals = (
         email={props.displayEmail}
         plan="Pro"
         balanceTokens={props.displayTokens}
+        billingOnly={props.accountPanelBillingOnly}
         onLogout={props.onLogout}
       />
     ) : null}
-    <MockSimpleInfoModal
-      open={props.serviceMenuOpen}
-      onClose={() => props.setServiceMenuOpen(false)}
-      title="Сервис"
-      body="Демо-меню: поддержка, документация и юридическая информация появятся позже. Рабочие функции дашборда не затронуты."
-    />
   </>
 );
 
-export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: UserPanelProps) {
+export function UserPanel({ activeView, onChangeView, layout = "sidebar", onVideoClick }: UserPanelProps) {
   const { showAuthed, showGuest, showAuthPlaceholder, sessionLoading, displayEmail } =
     useAuthDisplay();
   const { openAuth } = useAuthGate();
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
-  const [accountPanelTab, setAccountPanelTab] = useState<AccountPanelTab>("profile");
-  const [serviceMenuOpen, setServiceMenuOpen] = useState(false);
+  const [accountPanelTab, setAccountPanelTab] = useState<AccountPanelTab>("settings");
+  const [accountPanelBillingOnly, setAccountPanelBillingOnly] = useState(false);
+  const [planName, setPlanName] = useState(BILLING_PLANS.FREE.name);
   const [balance, setBalance] = useState(0);
   const [balanceLoaded, setBalanceLoaded] = useState(false);
 
-  const refreshBalance = useCallback(async () => {
+  const refreshBilling = useCallback(async () => {
     try {
-      const { data: next } = await loadTokenBalance();
-      if (next !== null) {
-        setBalance(next);
-        setBalanceLoaded(true);
+      const tokenRes = await loadTokenBalance();
+      if (tokenRes.data !== null) setBalance(tokenRes.data);
+      const billingRes = await fetch("/api/billing/me", { cache: "no-store" });
+      if (billingRes.ok) {
+        const data = (await billingRes.json()) as { subscription?: { plan?: BillingPlanId } };
+        const planId = data.subscription?.plan ?? "FREE";
+        setPlanName(BILLING_PLANS[planId]?.name ?? BILLING_PLANS.FREE.name);
       }
     } catch {
-      /* ignore */
+      /* keep last known plan */
+    } finally {
+      setBalanceLoaded(true);
     }
   }, []);
 
   useEffect(() => {
     if (!showAuthed || sessionLoading) return;
-    void refreshBalance();
-  }, [showAuthed, sessionLoading, displayEmail, refreshBalance]);
+    const timer = window.setTimeout(() => {
+      void refreshBilling();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [showAuthed, sessionLoading, displayEmail, refreshBilling]);
 
   useEffect(() => {
     const onTokensUpdated = (e: Event) => {
@@ -154,36 +167,45 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
     return () => window.removeEventListener("viral:tokens-updated", onTokensUpdated);
   }, []);
 
-  useEffect(() => {
-    if (!showAuthed || sessionLoading) return;
-    void refreshBalance();
-  }, [showAuthed, sessionLoading, displayEmail, refreshBalance]);
-
-  const openAccountPanel = (tab: AccountPanelTab) => {
-    if (!showAuthed) {
-      openAuth("login");
-      return;
-    }
-    setAccountPanelTab(tab);
-    setAccountPanelOpen(true);
-  };
-
-  const openAuthModal = (mode: AuthModalMode) => {
-    openAuth(mode);
-  };
-
   const displayTokens = useCountUp(balance, {
     animate: balanceLoaded && balance > 0,
   });
   const authFade = sessionLoading ? "opacity-60" : "opacity-100";
 
+  const navigateToView = (view: DashboardView) => {
+    if (view === "profile" && !showAuthed) {
+      openAuth("login");
+      return;
+    }
+    onChangeView(view);
+  };
+
+  const openAccountPanel = useCallback((tab: AccountPanelTab, billingOnly = false) => {
+    if (!showAuthed) {
+      openAuth("login");
+      return;
+    }
+    setAccountPanelBillingOnly(billingOnly);
+    setAccountPanelTab(tab);
+    setAccountPanelOpen(true);
+  }, [showAuthed, openAuth]);
+
+  useEffect(() => {
+    const onOpenAccount = (e: Event) => {
+      const detail = (e as CustomEvent<{ tab?: AccountPanelTab; billingOnly?: boolean }>).detail;
+      const tab = detail?.tab ?? "plans";
+      openAccountPanel(tab, detail?.billingOnly ?? tab !== "settings");
+    };
+    window.addEventListener("viral:open-account", onOpenAccount);
+    return () => window.removeEventListener("viral:open-account", onOpenAccount);
+  }, [openAccountPanel]);
+
   const modalProps = {
     accountPanelOpen,
     accountPanelTab,
+    accountPanelBillingOnly,
     setAccountPanelTab,
     setAccountPanelOpen,
-    serviceMenuOpen,
-    setServiceMenuOpen,
     showAuthed,
     displayEmail,
     displayTokens,
@@ -192,6 +214,8 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
       openAuth("logout");
     },
   };
+
+  const balanceLoading = showAuthed && !balanceLoaded;
 
   const authPlaceholder = (
     <div className="mb-2 hidden min-h-[2.5rem] flex-row gap-2 lg:flex" aria-hidden>
@@ -204,14 +228,14 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
     <div className="dashboard-fade-in mb-2 hidden flex-row gap-2 lg:flex">
       <button
         type="button"
-        onClick={() => openAuthModal("login")}
+        onClick={() => openAuth("login")}
         className="dashboard-ease flex-1 rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
       >
         Войти
       </button>
       <button
         type="button"
-        onClick={() => openAuthModal("signup")}
+        onClick={() => openAuth("signup")}
         className="dashboard-ease flex-1 rounded-lg border border-zinc-200 bg-white py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
       >
         Регистрация
@@ -229,7 +253,7 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
               <button
                 key={item.key}
                 type="button"
-                onClick={() => item.view && onChangeView(item.view)}
+                onClick={() => item.view && navigateToView(item.view)}
                 className={`flex flex-1 flex-col items-center gap-1 rounded-lg px-1.5 py-2 text-xs font-medium transition-colors ${
                   item.view === activeView
                     ? "bg-emerald-100 text-emerald-900"
@@ -262,62 +286,51 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
           </p>
         ) : null}
         {showAuthed ? (
-        <div className={`dashboard-ease hidden items-start gap-2 lg:flex ${authFade}`}>
-          <div className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 shadow-sm shadow-emerald-900/5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold tracking-tight text-emerald-900">Pro</span>
-              <span className="flex items-center gap-1 text-lg font-bold tabular-nums tracking-tight text-emerald-900">
-                {formatTokensRuSpace(displayTokens)}
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path
-                    d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-            </div>
+        <div className={`dashboard-ease hidden grid-cols-2 gap-1.5 lg:grid ${authFade}`}>
+          <div className="min-w-0 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 shadow-sm shadow-emerald-900/5">
+            <span className="block text-[10px] font-semibold leading-tight text-emerald-900">{planName}</span>
+            <span className="mt-0.5 flex items-center gap-1 text-lg font-bold tabular-nums leading-none tracking-tight text-emerald-900">
+              {balanceLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-600" aria-label="Загрузка баланса" />
+              ) : (
+                <>
+                  {formatTokensRuSpace(displayTokens)}
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path
+                      d="M13.75 2.75 6.5 13h4.75L10.25 21.25 17.5 11h-4.75l1-8.25Z"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </>
+              )}
+            </span>
           </div>
           <button
             type="button"
-            onClick={() => openAccountPanel("tokens")}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
-            aria-label="Пополнить токены"
+            onClick={() => openAccountPanel("plans", true)}
+            className="flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-600 px-2 py-1.5 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5.25v13.5M5.25 12h13.5" />
-            </svg>
+            Тариф
           </button>
         </div>
         ) : null}
 
         {showAuthed ? (
-        <div className={`dashboard-ease mt-2 hidden grid-cols-2 gap-2 lg:grid ${authFade}`}>
+        <div className={`dashboard-ease mt-2 hidden lg:block ${authFade}`}>
           <button
             type="button"
-            onClick={() => openAccountPanel("settings")}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
+            onClick={() => openAccountPanel("settings", false)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
           >
             <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.281Z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
             </svg>
-            Настройки
+            Настройки аккаунта
           </button>
-          <div>
-            <button
-              type="button"
-              onClick={() => openAccountPanel("profile")}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-1.5 text-[11px] font-medium text-zinc-700 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-900"
-            >
-              <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-              </svg>
-              Профиль
-            </button>
-          </div>
         </div>
         ) : null}
 
@@ -329,7 +342,7 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
               type="button"
               disabled={item.soon}
               onClick={() => {
-                if (item.view) onChangeView(item.view);
+                if (item.view) navigateToView(item.view);
               }}
               className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 item.view && activeView === item.view
@@ -350,18 +363,8 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar" }: User
         </nav>
 
 
-        <div className="mt-2 hidden items-center justify-between gap-2 border-t border-zinc-100 pt-2 lg:flex">
-          <span className="truncate text-base font-semibold tracking-tight text-zinc-800">{SERVICE_NAME}</span>
-          <button
-            type="button"
-            onClick={() => setServiceMenuOpen(true)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition-colors hover:border-emerald-300 hover:text-emerald-800"
-            aria-label="Меню сервиса"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75a2.25 2.25 0 0 1 2.25-2.25h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />
-            </svg>
-          </button>
+        <div className="mt-2 hidden border-t border-zinc-100 pt-2 lg:block">
+          <ViralLogo size="sm" showWordmark />
         </div>
       </div>
 
