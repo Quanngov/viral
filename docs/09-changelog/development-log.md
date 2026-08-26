@@ -2,6 +2,92 @@
 
 > Engineering changelog for knowledge base. Product release notes: **не определено в текущем проекте**.
 
+## 2026-08-26 — Promo: fix header visibility + premium gold redesign
+
+**Files:** `src/components/dashboard/promo/PromoProvider.tsx`, `src/components/dashboard/promo/PromoCard.tsx`, `src/components/dashboard/promo/PromoHeader.tsx`, `src/components/dashboard/promo/PromoCloseDialog.tsx`, `src/lib/billing/promo.ts`
+
+- **Fixed header visibility for authenticated users**: the once-per-day state was stored under a single unversioned, browser-global `localStorage` key, so a stale test value (or a guest/another account) permanently hid the header for a logged-in user in a normal browser. Storage is now versioned and scoped per user (`viral:promo:v2:<email-hash|anon>`), so old test keys no longer block the offer; the guest and authed contexts use separate keys, and a new day resets the once-per-day rule. The provider now waits for both billing and session to settle (`!billing.loading && !sessionLoading`) so the scope/plan are stable and the header does not flash or disappear after the first render (no hydration mismatch — all state stays client-side).
+- **Redesigned promo card** to a premium graphite/gold offer (matches the reference): near-black `#0e0f12` card, thin gold border, soft gold glow and top radial highlight, gold sparkles; large gold "−30%", white plan name, big discounted price + strikethrough old price, gold "Экономия X ₽"; volumetric gold badge (crown for upgrade, lightning for tokens) with glow; feature rows with dark tile + gold icon + gold value + light label (real data from `billing.config.ts`: `tokensPerPeriod`, `maxCompetitors`); large gold CTA "Улучшить"/"Купить токены" with arrow. Token-pack card uses the same visual language with real `TOKEN_PACKS` values.
+- **Redesigned promo header** to a compact horizontal version of the card: dark graphite background, thin gold border, gold "−30%", plan name, discounted+old price (desktop), gold timer pill, gold CTA, close (×). Timer logic unchanged.
+- Close-dialog accent aligned to gold (was rose/emerald).
+- No billing/pricing/checkout/Prisma changes; upgrade/buy still reuse `viral:open-account` → `AccountPanel`.
+- **Result:** header now reliably shows for authenticated users (old test state cannot block it), and all promo surfaces look like a premium limited-time offer. UI-only.
+
+## 2026-08-26 — Promo: point-wise design refinements (arrows, full-width header, branding, feature rows)
+
+**Files:** `src/components/dashboard/promo/PromoCard.tsx`, `src/components/dashboard/promo/PromoHeader.tsx`, `src/app/home-dashboard.tsx`
+
+- **CTA buttons:** removed the arrow icon from all promo CTA buttons (card «Улучшить»/«Купить токены» and header «Улучшить») — buttons now contain text only, visually centered; unused `ArrowIcon` component removed
+- **Top header:** promo header now spans the full viewport width (edge to edge) instead of being constrained to the main dashboard content area. The dashboard container was reflowed into a `flex-col` so the header sits above the sidebar+main row and fills 100% of the viewport width; inner content is aligned to the main content column (`lg:pl-[384px]` = 360px sidebar + 24px content padding, `px-6` elsewhere). Squared top / `rounded-b-xl` bottom corners for an edge-to-edge top bar. Desktop and mobile adapt correctly; no white side gaps; no other dashboard components changed
+- **Promo card:** removed the «ViralCloud» brand label from the top of both card variants (upgrade and token-pack)
+- **Feature rows:** slightly reduced the size of the feature rows (value `text-base` → `text-sm`, label `text-xs` → `text-[11px]`) so the two rows read more compactly and don't compete with the offer/price/CTA. Icons, counts, and structure unchanged
+- Colors, gold styling, card dimensions, offer/prices, tariff logic, timer, and billing/purchase flow unchanged. UI-only.
+
+## 2026-08-26 — Promo: header offer text, price, features & centering
+
+**Files:** `src/components/dashboard/promo/PromoHeader.tsx`, `src/components/dashboard/promo/PromoProvider.tsx`, `src/components/dashboard/promo/PromoCard.tsx`
+
+- **Offer text:** «−30% на PRO» → «−30% НА PRO» everywhere («НА PRO»/«НА BUSINESS» now in caps and gold, same color as the −30%; also in the close-dialog title via the provider string)
+- **Header price:** the discounted price is now white, larger (`text-xl font-black`), always visible, and a prominent header element; the old price stays struck-through and secondary. Price values and discount logic unchanged
+- **Header features:** added the two card characteristics (tokens, monthly competitors) between the price and the timer, reusing the same real data the card uses (`BILLING_PLANS[nextPlanId].tokensPerPeriod`/`maxCompetitors`, exposed on `HeaderOfferInfo`); rendered compactly in the horizontal header with the same gold icons (Zap/Users). No new pricing/token logic
+- **Centering:** offer, price, features, and timer are grouped in one centered block (`flex-1 justify-center`); the close (×) stays on the right outside the centered content, CTA keeps its position
+- Card design, gold/black scheme, border, CTA, timer logic, prices, billing, purchase/upgrade flow, and show-logic unchanged. UI-only.
+
+## 2026-08-26 — Promo: viewport-centered header + English plan names
+
+**Files:** `src/components/dashboard/promo/PromoHeader.tsx`, `src/lib/billing/promo.ts`
+
+- **Header centering vs viewport:** the promo header content (offer, price, old price, tokens/competitors, timer) is now centered relative to the full viewport width (`viewport/2`), not the inner Dashboard container. Removed the `lg:pl-[384px]` offset (which aligned to the dashboard column and shifted the center) and rebuilt the bar with a `lg:grid-cols-[1fr_auto_1fr]` layout — the equal left/right `1fr` columns keep the text block exactly at screen center while the CTA + close (×) live in the right column (out of the centering). On mobile (`grid-cols-1`) the content block centers and the CTA/close stack below, close stays at the right
+- **Plan names in English (promo UI only):** added `planDisplayName(planId)` in `promo.ts` (FREE/TRIAL/PRO/BUSINESS) and used it for `nextPlanName` in `computeUpgradeOffer`, so the header, promo card, and close dialog all show «−30% НА PRO»/«−30% НА BUSINESS» instead of Russian names («Про»/«Бизнес»). «НА» is caps everywhere. Internal `BILLING_PLANS[].name`/backend values are unchanged — normalization is display-only
+- No color/size/price/discount/timer/billing/checkout/show-logic changes. UI-only.
+
+## 2026-08-26 — Promo: card «НА PRO» sizing + header composition (timer→CTA, full-composition centering)
+
+**Files:** `src/components/dashboard/promo/PromoCard.tsx`, `src/components/dashboard/promo/PromoHeader.tsx`
+
+- **Card «−30% НА PRO» sizing:** «НА PRO»/«НА BUSINESS» in the promo card now uses the exact same style as «−30%» (`text-[34px]`, `font-black`, `leading-none`, `tracking-tight`, gold) — same font-size, line height and visual hierarchy; text unchanged («−30% НА PRO» / «−30% НА BUSINESS»)
+- **Header composition order & CTA:** «Улучшить» is now a direct member of the centered composition immediately after the timer (same `gap-x-4` spacing as the other elements), so the whole `[offer → price → tokens/competitors → timer → Улучшить]` reads as ONE horizontal group
+- **Centering of the whole composition:** the entire composition (including «Улучшить») sits in the middle `auto` column of `lg:grid-cols-[1fr_auto_1fr]`, so `center(composition) = viewport/2`. The close (×) is absolutely positioned at the right edge (`absolute right-3 top-1/2`) and does not participate in the centering calculation
+- **Responsive:** on narrow screens the composition stays centered and wraps (button still after timer); nothing overflows. Color scheme, gold style, border, background, prices, discount, timer, feature texts, billing, upgrade flow, and show-logic unchanged. UI-only.
+
+## 2026-08-26 — Promo: registration offer for unauthenticated users
+
+**Files:** `src/components/dashboard/promo/PromoProvider.tsx`, `src/components/dashboard/promo/PromoHeader.tsx`, `src/components/dashboard/promo/PromoCard.tsx`, `src/lib/billing/promo.ts`
+
+- **Guest header:** for unauthenticated users the promo header now shows a separate registration offer instead of the discount offer — «Пробный режим» (bold, gold, main text) + «Чтобы открыть все функции зарегистрируйтесь» + «Регистрация» button. No −30%, PRO/BUSINESS, prices, timer or upgrade CTA. Same premium graphite/gold container, border and viewport-centering; the close (×) dismisses directly (no discount-confirmation dialog). Reuses the existing registration flow (`useAuthGate().openAuth("signup")` → `AuthModal`)
+- **Guest card:** the first normal-feed position for guests renders a registration card (same premium promo-card style): «Пробный режим», «Зарегистрируйтесь, чтобы открыть полный доступ к функциям ViralCloud», a short list of real existing features (поиск видео и тренды, конкуренты/мониторинг, скрипты/AI-генератор), and the «Регистрация» CTA. It only occupies the lead position in the normal home feed (`!isSearchMode`), never search results; no effect on pagination or real video data
+- **Logic:** added `"registration"` to `PromoVariant`; the provider detects guests via the existing session state (`useAuthDisplay().showGuest`, not localStorage). Guests always get the registration header/card (hydrated, dismissible, no expiry/timer gating); authenticated users keep the existing upgrade/token offers unchanged. `dismiss`/dialog state resets on auth-state change so the two offers never mix
+- Auth backend, OAuth, Prisma, billing, token logic, pricing, registration flow, search, video loading, and API untouched. UI-only.
+
+## 2026-08-26 — Promo: fix banners not rendering (daily-visibility + auth timing)
+
+**Files:** `src/components/dashboard/promo/PromoProvider.tsx`
+
+- **Root cause (why no banner showed for anyone):**
+  - **Stale/expired persisted state.** The once-per-day state was stored per user/day. If `localStorage` held a state for *today* with an **expired** `expiresAt` (an earlier test run, or a reload more than 1h after the offer was generated) and/or `headerShown: true`, then `offerActive` (`expiresAt > now`) was false → the card was hidden for the rest of the day, and the header was hidden by `headerShown`. Reloading the dev server never reset it, so old test state permanently suppressed all banners for that user/scope.
+  - **Guests waited for billing.** The init gate required `!billing.loading` even for guests, although the registration offer needs no billing. If billing hadn't settled (or was slow), `hydrated` never became `true` → neither header nor card ever rendered for guests.
+  - **One-shot `decision` freeze.** The header `decision` was computed once and never recomputed; a transient state (auth still loading, or `state === null`) could freeze `show: false`, so once auth resolved the banner never appeared.
+- **Fix:**
+  - **Regenerate expired offers.** On init, if a today-state's `expiresAt` is in the past, a fresh offer period is started (new `expiresAt`); `headerShown` is preserved so the once-per-day header rule still holds. The card reappears after reload; the header still hides if it was already shown today.
+  - **Guests don't wait for billing.** The init gate now only waits for the session (`sessionLoading`) for guests (registration offer is tariff-independent); authenticated users still wait for the real plan.
+  - **Reactive decision.** `decision`/`dismissed`/`closeDialogOpen` reset whenever auth state (`isGuest`) or user scope changes, and the decision effect no longer runs while `state` is absent, so the banner reliably (re)appears after auth settles and the two offer variants never mix.
+- Design, texts, colors, prices, timer, billing, auth backend, upgrade/registration flow, and search behavior unchanged. Logic-only fix.
+
+---
+
+## 2026-08-25 — Promo mechanics: top header + feed promo card
+
+**Files:** `src/components/dashboard/BillingContext.tsx`, `src/components/dashboard/promo/*`, `src/lib/billing/promo.ts`, `src/app/home-dashboard.tsx`, `src/components/dashboard/VideoGrid.tsx`, `src/components/dashboard/SearchResultsSection.tsx`, `src/components/dashboard/UserPanel.tsx`
+
+- Added a compact rose top promo header ("−30% на следующий тариф") with a real 1-hour countdown, upgrade CTA and a close (×) that opens a confirmation dialog (offer, prices, savings, remaining time)
+- Header shows once per day (persisted in `localStorage`), timer continues across reloads and expires cleanly (no negative time)
+- Added a promo card at the first video position in the normal feed (UI layer, not a fake video; never shown during search). Variant alternates per day between upgrade and token-pack
+- Offer prices/discounts/token packs derived from existing `billing.config.ts`; upgrade/buy reuse the existing `viral:open-account` → `AccountPanel` flow
+- `BillingContext` shares one `/api/billing/me` fetch; `UserPanel` refactored to consume it (removes duplicate balance/subscription queries)
+- **Result:** new promo surfaces + billing data sharing. No backend/API/Prisma/token-logic changes.
+
+---
+
 ## 2026-08-25 — Settings: "Использование токенов" usage page
 
 **Files:** `src/components/dashboard/TokenUsageSection.tsx` (new), `src/components/dashboard/mock-dashboard-panels.tsx`

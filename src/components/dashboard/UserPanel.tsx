@@ -9,8 +9,8 @@ import type { GridVideo } from "@/lib/mock-data";
 import { ViralLogo } from "@/components/landing/ui/ViralLogo";
 import { useCountUp } from "@/hooks/use-count-up";
 import { formatTokensRuSpace } from "@/lib/format-metrics";
-import { loadTokenBalance } from "@/lib/dashboard-fetch";
-import { BILLING_PLANS, getSubscriptionGrantTokens, type BillingPlanId } from "@/lib/billing/billing.config";
+import type { BillingPlanId } from "@/lib/billing/billing.config";
+import { useBilling } from "@/components/dashboard/BillingContext";
 
 export type DashboardView = "home" | "competitors" | "saved" | "scripts" | "profile" | "settings";
 
@@ -140,62 +140,13 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar", onVide
   const { showAuthed, showGuest, showAuthPlaceholder, sessionLoading, displayEmail } =
     useAuthDisplay();
   const { openAuth } = useAuthGate();
+  const billing = useBilling();
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
   const [accountPanelTab, setAccountPanelTab] = useState<AccountPanelTab>("settings");
   const [accountPanelBillingOnly, setAccountPanelBillingOnly] = useState(false);
-  const [planName, setPlanName] = useState(BILLING_PLANS.FREE.name);
-  const [planId, setPlanId] = useState<BillingPlanId>("FREE");
-  const [balance, setBalance] = useState(0);
-  const [balanceLoaded, setBalanceLoaded] = useState(false);
-  const [billingMe, setBillingMe] = useState<{
-    subscription?: { nextGrantAt?: string | null };
-    wallet?: { totalSpent?: number; totalGranted?: number };
-  } | null>(null);
 
-  const refreshBilling = useCallback(async () => {
-    try {
-      const tokenRes = await loadTokenBalance();
-      if (tokenRes.data !== null) setBalance(tokenRes.data);
-      const billingRes = await fetch("/api/billing/me", { cache: "no-store" });
-      if (billingRes.ok) {
-        const data = (await billingRes.json()) as {
-          subscription?: { plan?: BillingPlanId; nextGrantAt?: string | null };
-          wallet?: { totalSpent?: number; totalGranted?: number };
-        };
-        const planId = data.subscription?.plan ?? "FREE";
-        setPlanName(BILLING_PLANS[planId]?.name ?? BILLING_PLANS.FREE.name);
-        setPlanId(planId);
-        setBillingMe(data);
-      }
-    } catch {
-      /* keep last known plan */
-    } finally {
-      setBalanceLoaded(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!showAuthed || sessionLoading) return;
-    const timer = window.setTimeout(() => {
-      void refreshBilling();
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [showAuthed, sessionLoading, displayEmail, refreshBilling]);
-
-  useEffect(() => {
-    const onTokensUpdated = (e: Event) => {
-      const detail = (e as CustomEvent<{ balance?: number }>).detail;
-      if (typeof detail?.balance === "number") {
-        setBalance(detail.balance);
-        setBalanceLoaded(true);
-      }
-    };
-    window.addEventListener("viral:tokens-updated", onTokensUpdated);
-    return () => window.removeEventListener("viral:tokens-updated", onTokensUpdated);
-  }, []);
-
-  const displayTokens = useCountUp(balance, {
-    animate: balanceLoaded && balance > 0,
+  const displayTokens = useCountUp(billing.balance, {
+    animate: !billing.loading && billing.balance > 0,
   });
   const authFade = sessionLoading ? "opacity-60" : "opacity-100";
 
@@ -236,22 +187,22 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar", onVide
     showAuthed,
     displayEmail,
     displayTokens,
-    planName,
-    nextGrantAt: billingMe?.subscription?.nextGrantAt ?? null,
-    totalSpent: billingMe?.wallet?.totalSpent ?? 0,
-    totalGranted: billingMe?.wallet?.totalGranted ?? 0,
+    planName: billing.planName,
+    nextGrantAt: billing.nextGrantAt,
+    totalSpent: billing.totalSpent,
+    totalGranted: billing.totalGranted,
     onLogout: () => {
       setAccountPanelOpen(false);
       openAuth("logout");
     },
   };
 
-  const balanceLoading = showAuthed && !balanceLoaded;
+  const balanceLoading = showAuthed && billing.loading;
 
   // Лимит токенов текущего тарифа и доля остатка (для шкалы).
-  const planTotalTokens = getSubscriptionGrantTokens(planId);
+  const planTotalTokens = billing.planTotalTokens;
   const remainingPct = planTotalTokens > 0 ? Math.max(0, Math.min(100, (displayTokens / planTotalTokens) * 100)) : 0;
-  const nextPlanId = NEXT_PLAN[planId];
+  const nextPlanId = NEXT_PLAN[billing.planId];
 
   const authPlaceholder = (
     <div className="mb-2 pt-3 hidden min-h-[2.5rem] flex-row gap-2 lg:flex" aria-hidden>
@@ -324,7 +275,7 @@ export function UserPanel({ activeView, onChangeView, layout = "sidebar", onVide
             </p>
 
             <div className="mt-3.5 flex items-start justify-between gap-2">
-              <p className="min-w-0 truncate text-lg font-semibold leading-none text-emerald-900">{planName}</p>
+              <p className="min-w-0 truncate text-lg font-semibold leading-none text-emerald-900">{billing.planName}</p>
               <p className="flex shrink-0 items-center gap-1 text-emerald-900">
                 {balanceLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin text-emerald-600" aria-label="Загрузка баланса" />

@@ -37,6 +37,7 @@
 - Plans: FREE, TRIAL, PRO, BUSINESS; token packs; `/api/billing/*`, UI `/billing`
 - Account panel (modal) with summary header (balance, plan, CTA, spent/granted) + tabs; billing stats reused from `/api/billing/me`
 - Account rail: balance as "X / total" + 2-segment scale + upgrade CTA (FREE→PRO, PRO→BUSINESS); settings in nav under Профиль
+- Promo: once-per-day top header + first-position feed card (upgrade −30% или token-pack). Оффер в премиальном графитово-золотом стиле; цены из `billing.config.ts`; состояние показа привязано к пользователю (`viral:promo:v2:<scope>`), upgrade/buy через существующий `viral:open-account` → `AccountPanel`. Для неавторизованных вместо рекламного оффера — регистрационный хедер и карточка («Пробный режим» → «Регистрация» через `useAuthGate().openAuth`); гостей определяет существующая сессия (`useAuthDisplay().showGuest`), без localStorage. UI-only, без нового checkout.
 - Заказы в `BillingOrder`; confirm через admin — **платёжный провайдер (YooKassa/Stripe) не подключён в коде**
 
 ### Profile Hub & Dashboard Home (новое)

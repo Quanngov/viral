@@ -5,6 +5,8 @@ import type { GridVideo } from "@/lib/mock-data";
 import type { FeedPlatformMode } from "@/lib/search-query";
 import { uiLocaleToApi, uiPeriodToApi } from "@/lib/search-query";
 import { useAuthGateOptional } from "@/components/dashboard/AuthGateProvider";
+import { usePromo } from "@/components/dashboard/promo/PromoProvider";
+import { PromoCard } from "@/components/dashboard/promo/PromoCard";
 import { SearchToolbar } from "@/components/dashboard/SearchToolbar";
 import type { SearchFiltersPayload, SearchSubmitPayload } from "@/components/dashboard/SearchToolbar";
 import type { SearchGridFilters } from "@/components/dashboard/search-results-utils";
@@ -48,6 +50,7 @@ type FeedSession = {
 export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: SearchResultsSectionProps) {
   const { showToast } = useToast();
   const authGate = useAuthGateOptional();
+  const promo = usePromo();
   const { hydrateForVideos, lastError, clearError } = useSavedVideos();
   const ssrVideos = useMemo(
     () => filterAndResolveDisplayableVideos(initialHome.homeVideos),
@@ -410,7 +413,12 @@ export function SearchResultsSection({ searchCost, initialHome, onVideoClick }: 
                 gridFadeIn ? "opacity-100" : "opacity-0"
               }`}
             >
-              <VideoGrid videos={displayedVideos} appendFrom={appendFrom} onVideoClick={onVideoClick} />
+              <VideoGrid
+                videos={displayedVideos}
+                appendFrom={appendFrom}
+                onVideoClick={onVideoClick}
+                leadPromo={!isSearchMode && promo.showCard ? <PromoCard /> : null}
+              />
             </div>
           ) : null}
           {loadMoreLoading ? (
